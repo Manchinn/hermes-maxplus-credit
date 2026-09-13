@@ -1,69 +1,61 @@
 # MaxPlus Credit — Hermes Desktop plugin
 
-ดูเครดิต + usage + key ทุก pool ของ [MaxPlus](https://maxplus-ai.cc) ใน
-Hermes Desktop · View MaxPlus credit, usage and per-pool keys inside
-Hermes Desktop. UI ภาษาไทย·English.
+[🇹🇭 อ่านภาษาไทย](README.th.md)
+
+View [MaxPlus](https://maxplus-ai.cc) credit, usage and per-pool keys
+inside Hermes Desktop. Bilingual UI (Thai · English).
 
 ![status page](docs/status.png)
 
-## ติดตั้ง · Install
+## Install
 
-**Install from Git** (Settings → Capabilities → Plugins) แล้วใส่ repo นี้
-หรือกดลิงก์:
+**Install from Git** (Settings → Capabilities → Plugins) with this repo,
+or click:
 
 ```
 hermes://plugin/install?repo=Manchinn/hermes-maxplus-credit&enable=1
 ```
 
-หรือ CLI (ปักหมุด commit — แนะนำ · pinned, recommended):
+Or CLI (pinned — recommended):
 
 ```bash
 hermes plugins install Manchinn/hermes-maxplus-credit --ref <40-char-sha> --enable
 ```
 
-จากนั้นเปิดในแอป: Capabilities → Plugins → เปิด **MaxPlus Credit**
-(มาแบบ opt-in) · Then enable **MaxPlus Credit** in-app.
+Then enable **MaxPlus Credit** in-app (ships opt-in).
 
-## ใช้งาน · Usage
+## Usage
 
-1. เปิดหน้า **MaxPlus** จาก sidebar · Open the **MaxPlus** page.
-2. ใส่ **inference token** (`ccsk-…`) — โชว์เครดิต + usage บัญชี ·
-   Add your `ccsk-…` token for balance + account usage.
-3. ใส่ **management token** (`ccmk-…`) — โชว์ key ทั้งบัญชีแยกตาม pool ·
-   Add your `ccmk-…` token for the all-keys table.
-   - scope `keys:read` + `usage:read` ก็พอสำหรับดูอย่างเดียว ·
-     enough for read-only viewing.
-   - ติ๊ก `keys:update` เพิ่มถ้าจะย้าย pool จากใน plugin ·
-     add it only if you want in-plugin pool moves.
+1. Open the **MaxPlus** page from the sidebar.
+2. Add your **inference token** (`ccsk-…`) for balance + account usage.
+3. Add your **management token** (`ccmk-…`) for the all-keys table.
+   - `keys:read` + `usage:read` scopes are enough for read-only viewing.
+   - Add `keys:update` only if you want in-plugin pool moves.
 
-ย้าย pool: กด **ย้าย pool · Move** ในการ์ด key → เลือก pool → ยืนยัน.
-secret เดิมยังใช้ได้ แค่เปลี่ยน base URL ที่ client ให้ตรง
-(ปุ่ม base URL กดเพื่อ copy ได้เลย).
-Move pool: per-key **Move** button. The secret stays valid — just point
-your client at the shown base URL (click it to copy).
+Move pool: per-key **Move** button → pick a pool → confirm.
+The secret stays valid — just point your client at the shown base URL
+(click it to copy).
 
-> ย้ายแล้ว client ที่ใช้ key นั้นจะ 403 จนกว่า base URL จะตรง —
-> อย่าย้าย key ที่งานกำลังรัน · Moved keys 403 until clients follow.
+> Moved keys 403 until clients follow — don't move a key that is in use.
 
-## ความเป็นส่วนตัว · Privacy
+## Privacy
 
-- token เก็บใน storage ของแอปเครื่องคนใช้เท่านั้น ไม่ติดไปกับ repo ·
-  Tokens stay in the app's local per-plugin storage, never in this repo.
-- plugin ยิง `https://api.maxplus-ai.cc` ตรงจากเครื่องคนใช้ ·
-  Calls the MaxPlus API directly from your machine. No backend, no telemetry.
-- อ่านอย่างเดียวโดย default — เขียนเกิดแค่ตอนกดยืนยันย้าย pool ·
-  Read-only by default; writes happen only on confirmed pool moves.
+- Tokens stay in the app's local per-plugin storage, never in this repo.
+- Calls `https://api.maxplus-ai.cc` directly from your machine.
+  No backend, no telemetry.
+- Read-only by default; writes happen only on confirmed pool moves.
 
-## ไฟล์ · Files
+## Files
 
-| File | คืออะไร · What |
+| File | What |
 | --- | --- |
-| `plugin.js` | ตัว plugin (ไฟล์เดียว ไม่มี build) · The plugin (single file, no build) |
-| `README.md` | ไฟล์นี้ · This file |
+| `plugin.js` | The plugin (single file, no build) |
+| `README.md` | This file |
+| `README.th.md` | Thai version |
 | `LICENSE` | MIT |
 
-แก้ `plugin.js` แล้ว save — Desktop โหลดใหม่เองในไม่กี่วินาที
-(หรือ ⌘K → Reload desktop plugins) · Edit + save, the app hot-reloads.
+Edit + save `plugin.js` — the Desktop hot-reloads within seconds
+(or ⌘K → Reload desktop plugins).
 
 ## SDK
 
