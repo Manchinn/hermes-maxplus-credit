@@ -71,6 +71,25 @@ function costOf(t) {
   return typeof v === 'number' ? v : null
 }
 
+function fmtTokens(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return String(Math.round(n))
+}
+
+function tokensOf(t) {
+  const pick = (...ks) => {
+    for (const k of ks) if (typeof t[k] === 'number') return t[k]
+    return 0
+  }
+  return (
+    pick('input_tokens', 'prompt_tokens', 'input') +
+    pick('output_tokens', 'completion_tokens', 'output') +
+    pick('cache_read_tokens', 'cache_creation_tokens', 'cache_tokens')
+  )
+}
+
 function pickKey(me) {
   const k = (me && me.key) || {}
   const free = (me && me.daily_free_credit) || {}
@@ -245,7 +264,8 @@ export default {
         queryKey: [ID, 'usage', period],
         queryFn: () => fetchUsage(period),
         enabled: !!token,
-        refetchInterval: 300000,
+        // 1d รีเฟรชทุก 15 วิแบบ dashboard (โควต้า 20 ครั้ง/นาที เหลือเฟือ)
+        refetchInterval: period === '1d' ? 15000 : 300000,
         retry: false,
       })
     }
@@ -345,11 +365,13 @@ export default {
       if (q.error) return jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: `${label}${ERR_TH[errKey(q.error)] || 'ดูไม่ได้'}` })
       const t = totalsOf(q.data)
       const req = t.request_count ?? t.requests ?? null
+      const tok = tokensOf(t)
       return jsxs('div', {
         className: 'flex flex-col gap-0.5',
         children: [
           jsx(Row, { label: `${label}cost`, value: fmtUsd(costOf(t)) }),
           req != null ? jsx(Row, { label: `${label}requests`, value: String(req) }) : null,
+          tok ? jsx(Row, { label: `${label}tokens`, value: fmtTokens(tok) }) : null,
         ],
       })
     }
@@ -982,6 +1004,7 @@ export default {
           jsx(HeroSection, {}),
           jsx(Section, {
             title: 'usage บัญชี',
+            right: jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: '24 ชม. รีเฟรชทุก 15 วิ' }),
             children: jsxs('div', {
               className: 'flex flex-col',
               children: [
