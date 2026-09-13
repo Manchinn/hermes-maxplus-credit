@@ -62,9 +62,15 @@ apply a daily cap to all of them at once (always confirmed first).
 
 | Part | Contents |
 | --- | --- |
-| Chip + popup (right status bar) | Balance polled every 60s · click for popup: balance + pool/status + burn pace + cap bar + compact usage with period tabs (24h / 7d / 30d: cost · requests · tokens) + open-full-page/refresh buttons |
-| MaxPlus page (`/maxplus`) | Credit hero + burn pace · account usage 1d/7d/30d (24h refreshes every 15s) · smoke test · anomaly scan + freeze · keys table (search/pool filter/sort by spend) + pool moves · token fields · morning checklist |
+| Chip + popup (right status bar) | Balance polled every 60s · click for popup: balance + pool/status + burn pace + cap bar + daily free credit (when the account has it) + compact usage with period tabs (24h / 7d / 30d: cost · requests · tokens) + open-full-page/refresh buttons |
+| MaxPlus page (`/maxplus`) | Credit hero + burn pace + daily free credit · account usage 1d/7d/30d (24h refreshes every 15s) · smoke test · anomaly scan + freeze · keys table (search/pool filter/sort by spend) + pool moves · token fields · morning checklist |
 | ⌘K commands | `MaxPlus: เปิดหน้าสถานะ (Open)` · `MaxPlus: รีเฟรชเครดิต (Refresh)` · `MaxPlus: ลบ tokens (Clear)` |
+
+> **About the balance:** `credit_usd` is **account-level** — every pool draws from the
+> same bucket, so there is no per-pool balance to show (pools only differ in
+> pricing/model catalog). **Daily free credit** is a second bucket and **is
+> pool-scoped** — the plugin states whether the pool of the token you entered can
+> use it (`eligible_for_key_pool`).
 
 ## Privacy
 

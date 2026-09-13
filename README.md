@@ -63,9 +63,14 @@ smoke test: กด **รัน smoke test** — ตรวจ `me → models → 
 
 | ส่วน | มีอะไร |
 | --- | --- |
-| chip + popup (status bar ขวา) | ยอดคงเหลือ poll 60 วิ · กดดู popup: ยอด + pool/สถานะ + burn pace + แถบ cap + usage ย่อแบบเลือกช่วงได้ (24 ชม. / 7 วัน / 30 วัน: cost · requests · tokens) + ปุ่มเปิดหน้าเต็ม/รีเฟรช |
-| หน้า MaxPlus (`/maxplus`) | hero เครดิต + burn pace · usage บัญชี 1d/7d/30d (24 ชม. รีเฟรชทุก 15 วิ) · smoke test · จับงบไหม้ + แช่แข็ง · ตาราง key (ค้นหา/กรอง pool/เรียงตามยอด) + ย้าย pool · ช่องใส่/ลบ token · เช็กลิสต์เช้า |
+| chip + popup (status bar ขวา) | ยอดคงเหลือ poll 60 วิ · กดดู popup: ยอด + pool/สถานะ + burn pace + แถบ cap + เครดิตฟรีรายวัน (ถ้ามี) + usage ย่อแบบเลือกช่วงได้ (24 ชม. / 7 วัน / 30 วัน: cost · requests · tokens) + ปุ่มเปิดหน้าเต็ม/รีเฟรช |
+| หน้า MaxPlus (`/maxplus`) | hero เครดิต + burn pace + เครดิตฟรีรายวัน · usage บัญชี 1d/7d/30d (24 ชม. รีเฟรชทุก 15 วิ) · smoke test · จับงบไหม้ + แช่แข็ง · ตาราง key (ค้นหา/กรอง pool/เรียงตามยอด) + ย้าย pool · ช่องใส่/ลบ token · เช็กลิสต์เช้า |
 | คำสั่ง ⌘K | `MaxPlus: เปิดหน้าสถานะ` · `MaxPlus: รีเฟรชเครดิต` · `MaxPlus: ลบ tokens` |
+
+> **เรื่องยอดเงิน:** `credit_usd` เป็น **ระดับบัญชี** — ทุก pool กินถังเดียวกัน
+> จึงไม่มี "ยอดเหลือต่อ pool" ให้แสดง (pool ต่างกันแค่ pricing/model catalog)
+> ส่วน **เครดิตฟรีรายวัน** เป็นอีกถังและ **ผูกกับ pool** — plugin จะบอกตรงๆ ว่า
+> pool ที่ใส่ token อยู่ใช้เครดิตฟรีได้หรือไม่ (`eligible_for_key_pool`)
 
 ## ความเป็นส่วนตัว
 

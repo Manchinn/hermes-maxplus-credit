@@ -65,6 +65,32 @@ function fmtUsd(n) {
   return typeof n === 'number' && Number.isFinite(n) ? `$${n.toFixed(2)}` : '—'
 }
 
+const TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+
+// daily_free_credit.reset_at เป็น ISO datetime (Asia/Bangkok) — แสดงสั้นๆ พอ
+function fmtReset(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getDate()} ${TH_MON[d.getMonth()]} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+// เครดิตฟรีรายวัน = ถังที่สอง แยกจาก credit_usd และ "ผูก pool"
+// pool ที่ key นี้ใช้ต้องอยู่ใน free.pools[] ไม่งั้น remaining_for_key_pool_usd = 0
+function freeLine(free) {
+  if (!free || !free.enabled || typeof free.amount !== 'number') return null
+  const reset = fmtReset(free.resetAt)
+  const tail = reset ? ` · รีเซ็ต ${reset}` : ''
+  const poolTxt = Array.isArray(free.pools) && free.pools.length ? free.pools.join(', ') : null
+  if (free.eligible) {
+    const left = typeof free.remainingForKeyPool === 'number' ? free.remainingForKeyPool : free.remaining
+    const leftTxt = typeof left === 'number' ? `เหลือ ${fmtUsd(left)}` : `โควตา ${fmtUsd(free.amount)}`
+    return `เครดิตฟรี ${leftTxt} · pool นี้ใช้ได้${tail}`
+  }
+  return `เครดิตฟรี ${fmtUsd(free.amount)}/วัน${poolTxt ? ` เฉพาะ pool ${poolTxt}` : ''} — pool นี้ใช้ไม่ได้${tail}`
+}
+
 function totalsOf(json) {
   return ((json && json.totals) || json || {})
 }
@@ -95,12 +121,25 @@ function tokensOf(t) {
 
 function pickKey(me) {
   const k = (me && me.key) || {}
-  const free = (me && me.daily_free_credit) || {}
+  const f = (me && me.daily_free_credit) || {}
   return {
-    pool: k.key_pool || free.key_pool || '—',
+    // field จริงจาก API คือ key.pool (runbook เดิมเขียน key_pool — เก็บ fallback ไว้)
+    pool: k.pool || k.key_pool || f.key_pool || '—',
     limit: k.limit_usd ?? null,
     used: k.limit_used_usd ?? null,
+    period: k.limit_period ?? null,
     active: k.active ?? null,
+    free: {
+      enabled: !!f.enabled,
+      amount: typeof f.amount_usd === 'number' ? f.amount_usd : null,
+      used: typeof f.used_usd === 'number' ? f.used_usd : null,
+      reserved: typeof f.reserved_usd === 'number' ? f.reserved_usd : null,
+      remaining: typeof f.remaining_usd === 'number' ? f.remaining_usd : null,
+      pools: Array.isArray(f.pools) ? f.pools : [],
+      resetAt: f.reset_at || null,
+      eligible: !!f.eligible_for_key_pool,
+      remainingForKeyPool: typeof f.remaining_for_key_pool_usd === 'number' ? f.remaining_for_key_pool_usd : null,
+    },
   }
 }
 
@@ -346,6 +385,7 @@ export default {
         : days < 3
           ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${days < 1 ? 'ไม่ถึงวัน' : `${Math.floor(days)} วัน`} ⚠️`
           : `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${Math.floor(days)} วัน`
+      const freeText = freeLine(k.free)
       return jsxs('div', {
         style: { maxHeight: '60vh', overflowY: 'auto' },
         className: 'flex flex-col gap-2',
@@ -360,6 +400,7 @@ export default {
                 children: fmtUsd(bal),
               }),
               jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: pace }),
+              freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: freeText }) : null,
               typeof k.limit === 'number' && typeof k.used === 'number'
                 ? jsxs('div', {
                     className: 'flex flex-col gap-0.5',
@@ -1098,6 +1139,7 @@ export default {
         : days < 3
           ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${days < 1 ? 'ไม่ถึงวัน' : `${Math.floor(days)} วัน`} ⚠️`
           : `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${Math.floor(days)} วัน`
+      const freeText = freeLine(k.free)
       return jsxs('div', {
         className: 'flex flex-col gap-0.5 rounded-md border border-(--ui-stroke-secondary) p-3',
         children: [
@@ -1108,6 +1150,7 @@ export default {
             children: fmtUsd(bal),
           }),
           jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: pace }),
+          freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: freeText }) : null,
           typeof k.limit === 'number' && typeof k.used === 'number'
             ? jsxs('div', {
                 className: 'flex flex-col gap-0.5',
