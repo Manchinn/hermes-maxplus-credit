@@ -574,7 +574,6 @@ export default {
       const [dest, setDest] = useState(String(k.pool || 'auto'))
       const [busy, setBusy] = useState(false)
       const [scheme, setScheme] = useState('dark')
-      const noCap = k.limit_usd == null || k.limit_period !== 'daily'
       const used = typeof k.used_usd === 'number' ? k.used_usd : null
       const curPool = String(k.pool || 'auto')
       const copyBase = async () => {
@@ -634,13 +633,6 @@ export default {
               }),
             ],
           }),
-          jsx(Row, {
-            label: 'cap',
-            value: k.limit_usd == null ? '∞ ไม่จำกัด' : `${fmtUsd(k.limit_usd)}${k.limit_period ? `/${k.limit_period}` : ''}`,
-          }),
-          noCap && k.active !== false
-            ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: '⚠️ ไม่มี daily cap — เสี่ยงเผางบ (ตั้งใน Dashboard)' })
-            : null,
           jsxs('div', {
             className: 'flex gap-1.5',
             children: [
@@ -728,10 +720,6 @@ export default {
       const q = useKeysQuery()
       const [poolFilter, setPoolFilter] = useState('all')
       const [text, setText] = useState('')
-      // Feature 3 — daily-cap enforcer (runbook UC-6)
-      const [capDraft, setCapDraft] = useState('10')
-      const [confirmCap, setConfirmCap] = useState(false)
-      const [enforcing, setEnforcing] = useState(false)
       if (!mgmt) {
         return jsx(Section, {
           title: 'key ทุก pool',
@@ -754,41 +742,7 @@ export default {
         .filter((k) => (poolFilter === 'all' || String(k.pool || 'auto') === poolFilter))
         .filter((k) => !needle || String(k.name || '').toLowerCase().includes(needle) || String(k.id || '').toLowerCase().includes(needle))
         .sort((a, b) => (b.used_usd || 0) - (a.used_usd || 0))
-      const risky = list.filter((k) => (k.limit_usd == null || k.limit_period !== 'daily') && k.active !== false).length
       const maxUsed = list.reduce((m, k) => Math.max(m, typeof k.used_usd === 'number' ? k.used_usd : 0), 0)
-      const targets = list.filter((k) => (k.limit_usd == null || k.limit_period !== 'daily') && k.active !== false)
-      const doEnforce = async () => {
-        const cap = parseFloat(capDraft)
-        if (!(cap > 0)) {
-          host.notify({ kind: 'info', message: 'ใส่ cap เป็นตัวเลข $/วัน ก่อน' })
-          return
-        }
-        haptic('tap')
-        setEnforcing(true)
-        let ok = 0
-        let fail403 = false
-        let failOther = null
-        for (const k of targets) {
-          try {
-            await apiPatch(`/v1/api-keys/${encodeURIComponent(k.id)}`, { limit_usd: cap, limit_period: 'daily' })
-            ok++
-          } catch (e) {
-            if (errKey(e) === 'http-403') fail403 = true
-            else if (!failOther) failOther = ERR_TH[errKey(e)] || String((e && e.message) || e)
-          }
-        }
-        setEnforcing(false)
-        setConfirmCap(false)
-        queryClient.invalidateQueries({ queryKey: [ID] })
-        host.notify({
-          kind: 'info',
-          message: fail403
-            ? `ต้อง scope keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม (ใส่ได้ ${ok}/${targets.length})`
-            : (ok === targets.length
-                ? `ใส่ daily cap $${cap} แล้ว ${ok}/${targets.length} keys`
-                : `ใส่ได้ ${ok}/${targets.length} — ติด: ${failOther || 'ดู error ราย key'}`),
-        })
-      }
       const chipBtn = (id, label, active) => jsx('button', {
         type: 'button',
         onClick: () => {
@@ -800,59 +754,10 @@ export default {
         children: label,
       })
       return jsx(Section, {
-        title: `key ทุก pool · ${list.length}${risky ? ` · ⚠️ ${risky} ไม่มี daily cap` : ''}`,
+        title: `key ทุก pool · ${list.length}`,
         children: jsxs('div', {
           className: 'flex flex-col gap-1.5',
           children: [
-            risky > 0
-              ? jsxs('div', {
-                  className: 'flex flex-col gap-1 rounded-sm border border-(--ui-stroke-secondary) p-1.5',
-                  children: [
-                    jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `⚠️ ${risky} key ไม่มี daily cap — ใส่ให้ทั้งหมดทีเดียว (ต้อง keys:update)` }),
-                    confirmCap
-                      ? jsxs('div', {
-                          className: 'flex gap-1.5',
-                          children: [
-                            jsx('button', {
-                              type: 'button',
-                              disabled: enforcing,
-                              onClick: doEnforce,
-                              className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                              children: enforcing ? 'กำลังใส่…' : `ยืนยัน $${capDraft || '?'}/วัน ให้ ${targets.length} keys`,
-                            }),
-                            jsx('button', {
-                              type: 'button',
-                              onClick: () => setConfirmCap(false),
-                              className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                              children: 'ยกเลิก',
-                            }),
-                          ],
-                        })
-                      : jsxs('div', {
-                          className: 'flex gap-1.5',
-                          children: [
-                            jsx('input', {
-                              value: capDraft,
-                              spellCheck: false,
-                              inputMode: 'decimal',
-                              placeholder: '$/วัน (เช่น 10)',
-                              onChange: (e) => setCapDraft(e.target.value),
-                              className: 'w-36 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 font-mono text-xs',
-                            }),
-                            jsx('button', {
-                              type: 'button',
-                              onClick: () => {
-                                haptic('tap')
-                                setConfirmCap(true)
-                              },
-                              className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                              children: 'ใส่ cap',
-                            }),
-                          ],
-                        }),
-                  ],
-                })
-              : null,
             jsx('input', {
               value: text,
               spellCheck: false,
@@ -995,16 +900,9 @@ export default {
                   label: 'management (ccmk)',
                   placeholder: 'ccmk-…',
                   pattern: MGMT_RE,
-                  hint: 'ต้องขึ้นต้น ccmk- · ดูอย่างเดียวก็พอ, แช่แข็ง/ใส่ cap/ย้าย pool ต้อง keys:update',
+                  hint: 'ต้องขึ้นต้น ccmk- · ดูอย่างเดียวก็พอ, ย้าย pool ต้อง keys:update',
                 }),
               ],
-            }),
-          }),
-          jsx(Section, {
-            title: 'เช้าละ 2 นาที',
-            children: jsx('div', {
-              className: 'text-xs leading-relaxed text-(--ui-text-tertiary)',
-              children: 'credit พอไหม → key เปิด + pool ตรงเครื่องมือ → cap ไม่ชน → ไม่มี stream ค้าง (20 shared)',
             }),
           }),
         ],
