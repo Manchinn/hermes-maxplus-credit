@@ -315,14 +315,12 @@ export default {
     function ChipPopup() {
       const token = useValue($token)
       const me = useMeQuery()
-      const u7 = useUsageQuery('7d')
       const [period, setPeriod] = useState('1d')
       const PERIODS = [
         { id: '1d', label: '24 ชม.' },
         { id: '7d', label: '7 วัน' },
         { id: '30d', label: '30 วัน' },
       ]
-      const periodLabel = (PERIODS.find((p) => p.id === period) || PERIODS[0]).label + ' '
       const refresh = () => {
         haptic('tap')
         queryClient.invalidateQueries({ queryKey: [ID] })
@@ -377,14 +375,6 @@ export default {
       }
       const k = pickKey(me.data)
       const bal = me.data && me.data.credit_usd
-      const c7 = !u7.isLoading && !u7.error ? costOf(totalsOf(u7.data)) : null
-      const perDay = c7 != null ? c7 / 7 : null
-      const days = typeof bal === 'number' && perDay > 0 ? bal / perDay : null
-      const pace = days == null
-        ? (c7 != null ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน` : 'รอ usage 7 วัน…')
-        : days < 3
-          ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${days < 1 ? 'ไม่ถึงวัน' : `${Math.floor(days)} วัน`} ⚠️`
-          : `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${Math.floor(days)} วัน`
       const freeText = freeLine(k.free)
       return jsxs('div', {
         style: { maxHeight: '60vh', overflowY: 'auto' },
@@ -399,7 +389,6 @@ export default {
                 className: 'font-mono tabular-nums',
                 children: fmtUsd(bal),
               }),
-              jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: pace }),
               freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: freeText }) : null,
               typeof k.limit === 'number' && typeof k.used === 'number'
                 ? jsxs('div', {
@@ -409,7 +398,7 @@ export default {
                       jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `cap ${fmtUsd(k.limit)} · ใช้ไป ${fmtUsd(k.used)} · เหลือ ${fmtUsd(k.limit - k.used)}` }),
                     ],
                   })
-                : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `key นี้ใช้สะสม ${fmtUsd(k.used)} · ไม่จำกัด cap` }),
+                : null,
             ],
           }),
           jsxs('div', {
@@ -429,7 +418,7 @@ export default {
                   children: p.label,
                 }, p.id)),
               }),
-              jsx(UsageBlock, { period, label: periodLabel }),
+              jsx(UsageBlock, { period, label: '' }),
             ],
           }),
           footer,
@@ -550,9 +539,9 @@ export default {
       return jsxs('div', {
         className: 'flex flex-col gap-0.5',
         children: [
-          jsx(Row, { label: `${label}cost`, value: fmtUsd(costOf(t)) }),
           req != null ? jsx(Row, { label: `${label}requests`, value: String(req) }) : null,
           tok ? jsx(Row, { label: `${label}tokens`, value: fmtTokens(tok) }) : null,
+          jsx(Row, { label: `${label}cost`, value: fmtUsd(costOf(t)) }),
         ],
       })
     }

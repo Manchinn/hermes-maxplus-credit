@@ -62,7 +62,7 @@ apply a daily cap to all of them at once (always confirmed first).
 
 | Part | Contents |
 | --- | --- |
-| Chip + popup (right status bar) | Balance polled every 60s · click for popup: balance + pool/status + burn pace + cap bar + daily free credit (when the account has it) + compact usage with period tabs (24h / 7d / 30d: cost · requests · tokens) + open-full-page/refresh buttons |
+| Chip + popup (right status bar) | Balance polled every 60s · click for popup: balance + pool/status + daily free credit (when the account has it) + cap bar (only for keys that have a cap) + compact usage with period tabs (24h / 7d / 30d: requests · tokens · cost) + open-full-page/refresh buttons |
 | MaxPlus page (`/maxplus`) | Credit hero + burn pace + daily free credit · account usage 1d/7d/30d (24h refreshes every 15s) · smoke test · anomaly scan + freeze · keys table (search/pool filter/sort by spend) + pool moves · token fields · morning checklist |
 | ⌘K commands | `MaxPlus: เปิดหน้าสถานะ (Open)` · `MaxPlus: รีเฟรชเครดิต (Refresh)` · `MaxPlus: ลบ tokens (Clear)` |
 
