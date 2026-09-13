@@ -6,14 +6,12 @@
  *
  * - statusBar chip: credit balance (or key count), polls every 60s
  * - page /maxplus: hero balance + burn pace, account usage 1d/7d/30d,
- *   all-keys table (search / pool filter / sort by spend), pool mover,
- *   smoke test (runbook §5.4), cost-anomaly scan + freeze (UC-3),
- *   daily-cap enforcer (UC-6), token slots (ccsk + ccmk)
+ *   all-keys table (search / pool filter / sort by spend), per-key usage,
+ *   token slots (ccsk + ccmk) — read-only
  * - palette: open status / refresh / clear tokens
  *
  * Tokens live in the app's ctx.storage only — never in this repo.
- * Read-only scopes (keys:read + usage:read) are enough for viewing;
- * keys:update is needed for pool moves, freeze (cap 0) and cap enforcing.
+ * Read-only plugin: keys:read + usage:read are enough — no write actions.
  */
 
 import {
@@ -117,24 +115,6 @@ function tokensOf(t) {
     pick('output_tokens', 'completion_tokens', 'output') +
     pick('cache_read_tokens', 'cache_creation_tokens', 'cache_tokens')
   )
-}
-
-// ลิสต์ของ <select> ถูกวาดโดย Chromium (ไม่ใช่ DOM ของแอป) จึงไม่รับธีมเอง —
-// เดา scheme จากความสว่างของสีตัวอักษรจริงในธีมปัจจุบัน (ธีมมืด = ตัวอักษรสว่าง)
-// ลำดับ: สีตัวอักษรแบบ rgb → color-scheme ของ root → ค่าเริ่มต้น dark
-function schemeOf(el) {
-  const lum = (c) => {
-    const m = /rgba?\(\s*(\d+)\s*[,\s]\s*(\d+)\s*[,\s]\s*(\d+)/.exec(String(c || ''))
-    return m ? 0.299 * +m[1] + 0.587 * +m[2] + 0.114 * +m[3] : null
-  }
-  try {
-    const l = lum(getComputedStyle(el).color)
-    if (l != null) return l > 140 ? 'dark' : 'light'
-    const cs = String(getComputedStyle(document.documentElement).colorScheme || '')
-    if (cs.includes('dark') && !cs.includes('light')) return 'dark'
-    if (cs.includes('light') && !cs.includes('dark')) return 'light'
-  } catch { /* ไม่มี DOM จริง (unit test) — ใช้ค่าเริ่มต้น */ }
-  return 'dark'
 }
 
 function pickKey(me) {
@@ -246,10 +226,6 @@ export default {
     const fetchKeys = () => apiWith($mgmt.get(), '/v1/api-keys')
     const fetchKeyUsage = (kid) => apiWith($mgmt.get(), `/v1/api-keys/${encodeURIComponent(kid)}/usage`)
 
-    // Common pools (see MaxPlus docs → Pool aliases). Moving a key with PATCH
-    // keeps the same secret — only the client's base URL must change.
-    const POOLS = ['native', 'grok-lite', 'grok-fast', 'grok', 'deepseek', 'glm-deepseek-cheaper', 'glm', 'gemini', 'gpt-pro', 'gpt-lite', 'gpt-image', 'claude-aws', 'free']
-
     // แท็บช่วงเวลาใช้ร่วมกันทั้ง chip popup และหน้าเต็ม
     const PERIODS = [
       { id: '1d', label: '24 ชม.' },
@@ -260,23 +236,6 @@ export default {
     function baseFor(pool) {
       const p = String(pool || 'auto')
       return p === 'native' ? `${API}/v1` : `${API}/${p}/v1`
-    }
-
-    async function apiPatch(path, body) {
-      const token = $mgmt.get()
-      if (!token) throw new Error('no-token')
-      let res
-      try {
-        res = await fetch(`${API}${path}`, {
-          method: 'PATCH',
-          headers: { Authorization: AUTH + ' ' + token, 'content-type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-      } catch {
-        throw new Error('network')
-      }
-      if (!res.ok) throw new Error(`http-${res.status}`)
-      return res.json()
     }
 
     // Full-URL request (pool base URLs are absolute, not API-relative).
@@ -570,38 +529,12 @@ export default {
         enabled: !!mgmt && open,
         retry: false,
       })
-      const [moveOpen, setMoveOpen] = useState(false)
-      const [dest, setDest] = useState(String(k.pool || 'auto'))
-      const [busy, setBusy] = useState(false)
       const [scheme, setScheme] = useState('dark')
       const used = typeof k.used_usd === 'number' ? k.used_usd : null
       const curPool = String(k.pool || 'auto')
       const copyBase = async () => {
         const ok = await ctx.os.writeClipboard(baseFor(curPool))
         host.notify({ kind: 'info', message: ok ? `copy base URL แล้ว: ${baseFor(curPool)}` : 'copy ไม่ได้ จดเอง: ' + baseFor(curPool) })
-      }
-      const doMove = async () => {
-        if (!dest || dest === curPool) {
-          host.notify({ kind: 'info', message: 'เลือก pool ปลายทางก่อน (ต้องต่างจากเดิม)' })
-          return
-        }
-        setBusy(true)
-        try {
-          await apiPatch(`/v1/api-keys/${encodeURIComponent(k.id)}`, { pool: dest })
-          queryClient.invalidateQueries({ queryKey: [ID] })
-          setMoveOpen(false)
-          host.notify({ kind: 'info', message: `ย้าย ${k.name || k.id} → ${dest} แล้ว — เปลี่ยน base URL ที่ client เป็น ${baseFor(dest)} (secret เดิมใช้ได้)` })
-        } catch (e) {
-          const key = errKey(e)
-          host.notify({
-            kind: 'info',
-            message: key === 'http-403'
-              ? 'token นี้ไม่มีสิทธิ์ keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม'
-              : (ERR_TH[key] || 'ย้ายไม่สำเร็จ'),
-          })
-        } finally {
-          setBusy(false)
-        }
       }
       return jsxs('div', {
         className: 'flex flex-col gap-1 rounded-sm border border-(--ui-stroke-secondary) p-1.5',
@@ -645,54 +578,8 @@ export default {
                 className: 'mt-0.5 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
                 children: open ? 'ซ่อน usage' : 'ดู usage',
               }),
-              jsx('button', {
-                type: 'button',
-                onClick: () => {
-                  haptic('tap')
-                  setDest(curPool)
-                  setMoveOpen(!moveOpen)
-                },
-                className: 'mt-0.5 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                children: moveOpen ? 'ยกเลิกย้าย' : 'ย้าย pool',
-              }),
             ],
           }),
-          moveOpen
-            ? jsxs('div', {
-                className: 'flex flex-col gap-1 rounded-sm border border-(--ui-stroke-secondary) p-1.5',
-                children: [
-                  jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'ย้ายแล้ว client จะ 403 จนกว่า base URL จะตรง — secret เดิมใช้ได้' }),
-                  jsxs('div', {
-                    className: 'flex gap-1.5',
-                    children: [
-                      jsx('select', {
-                        value: dest,
-                        onChange: (e) => setDest(e.target.value),
-                        // ลิสต์ของ <select> ถูกวาดโดย Chromium ไม่ใช่ DOM ของแอป → ต้องบอก
-                        // color-scheme เอง ไม่งั้นธีมมืดจะได้ลิสต์สีสว่างตัดกัน
-                        // อ่านสีตัวอักษรจริงของธีมตอนกด แล้วเลือก scheme ให้ตรง (รองรับ light skin ด้วย)
-                        onMouseDown: (e) => setScheme(schemeOf(e.currentTarget)),
-                        onFocus: (e) => setScheme(schemeOf(e.currentTarget)),
-                        style: { colorScheme: scheme },
-                        className: 'min-w-0 flex-1 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 font-mono text-xs',
-                        children: POOLS.map((p) => jsx('option', {
-                          value: p,
-                          style: { backgroundColor: 'var(--ui-bg-elevated, #1e1e1e)', color: 'var(--ui-text-primary, inherit)' },
-                          children: p,
-                        }, p)),
-                      }),
-                      jsx('button', {
-                        type: 'button',
-                        disabled: busy,
-                        onClick: doMove,
-                        className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                        children: busy ? 'กำลังย้าย…' : 'ยืนยัน',
-                      }),
-                    ],
-                  }),
-                ],
-              })
-            : null,
           open
             ? (u.isLoading
                 ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'กำลังดึง…' })
@@ -900,7 +787,7 @@ export default {
                   label: 'management (ccmk)',
                   placeholder: 'ccmk-…',
                   pattern: MGMT_RE,
-                  hint: 'ต้องขึ้นต้น ccmk- · ดูอย่างเดียวก็พอ, ย้าย pool ต้อง keys:update',
+                  hint: 'ต้องขึ้นต้น ccmk- · ดู key ทุก pool แค่นี้ก็พอ',
                 }),
               ],
             }),
