@@ -33,11 +33,20 @@ hermes plugins install Manchinn/hermes-maxplus-credit --ref <40-char-sha> --enab
 2. ใส่ **inference token** (`ccsk-…`) — โชว์เครดิต + usage บัญชี
 3. ใส่ **management token** (`ccmk-…`) — โชว์ key ทั้งบัญชีแยกตาม pool
    - scope `keys:read` + `usage:read` ก็พอสำหรับดูอย่างเดียว
-   - ติ๊ก `keys:update` เพิ่มถ้าจะย้าย pool จากใน plugin
+   - ติ๊ก `keys:update` เพิ่มถ้าจะย้าย pool / freeze / ใส่ cap จากใน plugin
 
 ย้าย pool: กด **ย้าย pool · Move** ในการ์ด key → เลือก pool → ยืนยัน
 secret เดิมยังใช้ได้ แค่เปลี่ยน base URL ที่ client ให้ตรง
 (ปุ่ม base URL กดเพื่อ copy ได้เลย)
+
+smoke test: กด **รัน smoke · Run** — ตรวจ `me → models → chat` 16 tokens ทีเดียว
+(ใช้ pool ของ key นี้, ไม่ต้องก๊อป cURL)
+
+จับงบไหม้: ตั้ง threshold → กด **สแกน · Scan** (ครั้งแรก = ตั้ง baseline,
+ครั้งถัดไปเทียบส่วนต่าง) → key ไหนเกินมีปุ่ม **Freeze** (cap → 0, ปลดใน Dashboard)
+
+ใส่ cap: ถ้ามี key ไม่มี daily cap จะมีแถบ **ใส่ cap · Enforce** —
+ใส่ daily cap ให้ทุก key ที่ขาดทีเดียว (ยืนยันก่อนเสมอ)
 
 > ย้ายแล้ว client ที่ใช้ key นั้นจะ 403 จนกว่า base URL จะตรง —
 > อย่าย้าย key ที่งานกำลังรัน
@@ -47,7 +56,7 @@ secret เดิมยังใช้ได้ แค่เปลี่ยน ba
 - token เก็บใน storage ของแอปเครื่องคนใช้เท่านั้น ไม่ติดไปกับ repo
 - plugin ยิง `https://api.maxplus-ai.cc` ตรงจากเครื่องคนใช้
   ไม่มี backend ไม่เก็บข้อมูล
-- อ่านอย่างเดียวโดย default — เขียนเกิดแค่ตอนกดยืนยันย้าย pool
+- อ่านอย่างเดียวโดย default — เขียนเกิดแค่ตอนกดยืนยัน (ย้าย pool / freeze / ใส่ cap)
 
 ## ไฟล์
 

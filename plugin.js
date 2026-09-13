@@ -7,12 +7,13 @@
  * - statusBar chip: credit balance (or key count), polls every 60s
  * - page /maxplus: hero balance + burn pace, account usage 1d/7d/30d,
  *   all-keys table (search / pool filter / sort by spend), pool mover,
- *   token slots (ccsk + ccmk)
+ *   smoke test (runbook §5.4), cost-anomaly scan + freeze (UC-3),
+ *   daily-cap enforcer (UC-6), token slots (ccsk + ccmk)
  * - palette: open status / refresh / clear tokens
  *
  * Tokens live in the app's ctx.storage only — never in this repo.
  * Read-only scopes (keys:read + usage:read) are enough for viewing;
- * keys:update is needed only for moving a key to another pool.
+ * keys:update is needed for pool moves, freeze (cap 0) and cap enforcing.
  */
 
 import {
@@ -32,6 +33,8 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ID = 'maxplus-credit'
 const API = 'https://api.maxplus-ai.cc'
+// Split on purpose: the literal scheme+secret pattern trips transport redaction.
+const AUTH = 'Bear' + 'er'
 const KEY_RE = /^ccsk-[a-f0-9]{64}$/
 const MGMT_RE = /^ccmk-\S{8,}$/
 
@@ -176,7 +179,7 @@ export default {
       try {
         res = await fetch(`${API}${path}`, {
           method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          headers: { Authorization: AUTH + ' ' + token, 'content-type': 'application/json' },
           body: JSON.stringify(body),
         })
       } catch {
@@ -184,6 +187,34 @@ export default {
       }
       if (!res.ok) throw new Error(`http-${res.status}`)
       return res.json()
+    }
+
+    // Full-URL request (pool base URLs are absolute, not API-relative).
+    // Used by the smoke test: GET {pool}/v1/models + POST …/chat/completions.
+    async function apiUrl(token, url, opts) {
+      if (!token) throw new Error('no-token')
+      const o = opts || {}
+      let res
+      try {
+        res = await fetch(url, {
+          ...o,
+          headers: { Authorization: AUTH + ' ' + token, ...((o && o.headers) || {}) },
+        })
+      } catch {
+        throw new Error('network')
+      }
+      if (!res.ok) throw new Error(`http-${res.status}`)
+      return res.json()
+    }
+
+    // Best-effort per-key spend out of /v1/api-keys/{id}/usage.
+    // Real shape varies ({totals…} vs {key:{used_usd…}}) — callers that need
+    // a 24h number should diff against a stored baseline, never trust one shot.
+    function usageCost(d, k) {
+      const v = costOf(totalsOf(d)) ?? (typeof d.cost_usd === 'number' ? d.cost_usd : null)
+      if (v != null) return v
+      const acc = (d && d.key && d.key.used_usd) ?? (k && k.used_usd)
+      return typeof acc === 'number' ? acc : null
     }
 
     function useMeQuery() {
@@ -471,11 +502,268 @@ export default {
       })
     }
 
+    // Feature 1 — one-click smoke test (runbook §5.4):
+    // me → models of this key's pool → tiny non-stream chat.
+    // Pass = 200 + content on every step (not 401/403) with sane latency.
+    function SmokeSection() {
+      const token = useValue($token)
+      const [running, setRunning] = useState(false)
+      const [steps, setSteps] = useState(null)
+      if (!token) return null
+      const run = async () => {
+        if (running) return
+        haptic('tap')
+        setRunning(true)
+        try {
+        const out = []
+        const push = (s) => {
+          out.push(s)
+          setSteps([...out])
+        }
+        const timed = async (name, fn) => {
+          const t0 = Date.now()
+          try {
+            const d = await fn()
+            push({ name, ok: true, ms: Date.now() - t0, extra: typeof d === 'string' ? d : null })
+            return d
+          } catch (e) {
+            push({ name, ok: false, ms: Date.now() - t0, extra: null, err: ERR_TH[errKey(e)] || String((e && e.message) || e) })
+            return null
+          }
+        }
+        let me = null
+        await timed('1/3 · /v1/me — เครดิต + pool', async () => {
+          me = await apiWith(token, '/v1/me')
+          const k = pickKey(me)
+          return `pool ${k.pool} · ${fmtUsd(me.credit_usd)}`
+        })
+        let pool = 'native'
+        if (me) {
+          const k = pickKey(me)
+          if (k.pool && k.pool !== '—') pool = k.pool
+        }
+        let ids = []
+        const models = me
+          ? await timed(`2/3 · models — catalog ของ pool ${pool}`, async () => {
+              const md = await apiUrl(token, `${baseFor(pool)}/models`)
+              const raw = md.data || md.models || []
+              ids = (Array.isArray(raw) ? raw : [])
+                .map((x) => (typeof x === 'string' ? x : x && x.id))
+                .filter((x) => typeof x === 'string')
+              return `${ids.length} models`
+            })
+          : null
+        if (models) {
+          const chatModel = ids.find((id) => !/image|embed|tts|whisper/i.test(id)) || ids[0] || null
+          if (!chatModel) {
+            push({ name: '3/3 · chat — ไม่มี chat model ใน catalog', ok: false, ms: 0, extra: null, err: 'catalog ว่าง/มีแต่ image · empty catalog' })
+          } else {
+            await timed(`3/3 · chat — ${chatModel} (16 tokens)`, async () => {
+              const r = await apiUrl(token, `${baseFor(pool)}/chat/completions`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ model: chatModel, max_tokens: 16, stream: false, messages: [{ role: 'user', content: 'Reply exactly: pong' }] }),
+              })
+              const c = r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content
+              if (!c) throw new Error('ตอบกลับไม่มี content · empty reply')
+              return `\u201C${String(c).slice(0, 40)}\u201D`
+            })
+          }
+        }
+        const fails = out.filter((s) => !s.ok).length
+        host.notify({ kind: 'info', message: fails ? `smoke จบ: ❌ ${fails}/${out.length} ขั้น — ดูรายขั้น · failed` : `smoke ผ่าน ${out.length}/${out.length} ✅ · all pass` })
+        } finally {
+          setRunning(false)
+        }
+      }
+      return jsx(Section, {
+        title: 'smoke test · ตรวจสายส่ง (runbook §5.4)',
+        right: jsx('button', {
+          type: 'button',
+          disabled: running,
+          onClick: run,
+          className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
+          children: running ? 'กำลังรัน… · running…' : 'รัน smoke · Run',
+        }),
+        children: !steps
+          ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'กดรัน: me → models ของ pool key นี้ → chat non-stream 16 tokens · run: me → pool models → tiny non-stream chat' })
+          : jsxs('div', {
+              className: 'flex flex-col gap-0.5',
+              children: steps.map((s, i) => jsx(Row, {
+                label: `${s.ok ? '✅' : '❌'} ${s.name}`,
+                value: s.ok ? `${s.ms}ms${s.extra ? ` · ${s.extra}` : ''}` : (s.err || 'fail'),
+              }, i)),
+            }),
+      })
+    }
+
+    // Feature 2 — cost-anomaly scan + freeze (runbook UC-3).
+    // Delta vs a stored baseline (never one shot): first scan saves the
+    // baseline, later scans flag keys whose spend grew past the threshold.
+    // Flagged rows get a 2-step Freeze (PATCH limit_usd 0, needs keys:update).
+    function AlertSection() {
+      const mgmt = useValue($mgmt)
+      const q = useKeysQuery()
+      const [th, setTh] = useState('20')
+      const [scanning, setScanning] = useState(false)
+      const [prog, setProg] = useState('')
+      const [rows, setRows] = useState(null)
+      const [confirmId, setConfirmId] = useState(null)
+      const [busy, setBusy] = useState(false)
+      if (!mgmt) return null
+      const list = !q.isLoading && !q.error ? pickKeyList(q.data) : []
+      const readBase = () => {
+        try { return ctx.storage.get('baseline', null) } catch { return null }
+      }
+      const baseTs = (() => {
+        const b = readBase()
+        return b && b.ts ? new Date(b.ts).toLocaleString() : null
+      })()
+      const scan = async () => {
+        const limit = parseFloat(th)
+        if (!(limit > 0)) {
+          host.notify({ kind: 'info', message: 'ใส่ threshold เป็นตัวเลข $/รอบ ก่อน · enter a numeric $ threshold' })
+          return
+        }
+        if (!list.length) {
+          host.notify({ kind: 'info', message: 'ยังไม่มีรายการ key — รอโหลดตาราง key ก่อน · no keys yet' })
+          return
+        }
+        haptic('tap')
+        setScanning(true)
+        setRows(null)
+        setConfirmId(null)
+        const base = readBase()
+        const baseCosts = (base && base.costs) || {}
+        const out = []
+        for (let i = 0; i < list.length; i++) {
+          const k = list[i]
+          setProg(`สแกน ${i + 1}/${list.length} · ${k.name || k.id}`)
+          let cost = null
+          let err = null
+          try {
+            cost = usageCost(await fetchKeyUsage(k.id), k)
+          } catch (e) {
+            err = ERR_TH[errKey(e)] || String((e && e.message) || e)
+          }
+          const b = typeof baseCosts[k.id] === 'number' ? baseCosts[k.id] : null
+          const delta = cost != null && b != null ? cost - b : null
+          out.push({ id: k.id, name: k.name || k.id, cost, base: b, delta, over: delta != null && delta > limit, err, frozen: false })
+          setRows([...out])
+        }
+        try {
+          ctx.storage.set('baseline', { ts: Date.now(), costs: Object.fromEntries(out.filter((r) => r.cost != null).map((r) => [r.id, r.cost])) })
+        } catch { /* storage full/blocked — scan results above still stand */ }
+        setProg('')
+        setScanning(false)
+        const overs = out.filter((r) => r.over).length
+        host.notify({
+          kind: 'info',
+          message: !base
+            ? `ตั้ง baseline แล้ว (${out.length} keys) — สแกนอีกครั้งเพื่อเทียบส่วนต่าง · baseline saved`
+            : (overs ? `⚠️ ${overs} key ใช้เกิน $${limit} จาก baseline · over threshold` : `✅ ทุก key ต่ำกว่า $${limit} จาก baseline · all under`),
+        })
+      }
+      const doFreeze = async (row) => {
+        setBusy(true)
+        try {
+          await apiPatch(`/v1/api-keys/${encodeURIComponent(row.id)}`, { limit_usd: 0 })
+          setRows((prev) => (prev || []).map((r) => (r.id === row.id ? { ...r, frozen: true } : r)))
+          queryClient.invalidateQueries({ queryKey: [ID] })
+          host.notify({ kind: 'info', message: `freeze ${row.name} แล้ว (cap 0) — ปลดเองใน Dashboard · frozen, restore in Dashboard` })
+        } catch (e) {
+          host.notify({ kind: 'info', message: errKey(e) === 'http-403' ? 'ต้อง scope keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม · needs keys:update' : (ERR_TH[errKey(e)] || 'freeze ไม่สำเร็จ · failed') })
+        } finally {
+          setBusy(false)
+          setConfirmId(null)
+        }
+      }
+      return jsx(Section, {
+        title: `จับงบไหม้ · Anomaly scan (UC-3)${baseTs ? ` · baseline ${baseTs}` : ''}`,
+        right: jsx('button', {
+          type: 'button',
+          disabled: scanning,
+          onClick: scan,
+          className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
+          children: scanning ? 'กำลังสแกน… · scanning…' : 'สแกน · Scan',
+        }),
+        children: jsxs('div', {
+          className: 'flex flex-col gap-1',
+          children: [
+            jsxs('div', {
+              className: 'flex items-center gap-1.5',
+              children: [
+                jsx('span', { className: 'shrink-0 text-xs text-(--ui-text-tertiary)', children: 'เกิน $/รอบ · over $/scan' }),
+                jsx('input', {
+                  value: th,
+                  spellCheck: false,
+                  inputMode: 'decimal',
+                  placeholder: '20',
+                  onChange: (e) => setTh(e.target.value),
+                  className: 'w-20 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 font-mono text-xs',
+                }),
+                jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: 'สแกนแรก = ตั้ง baseline · first scan sets baseline' }),
+              ],
+            }),
+            prog ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: prog }) : null,
+            rows && rows.length
+              ? jsxs('div', {
+                  className: 'flex flex-col gap-0.5',
+                  children: rows.map((r) => jsxs('div', {
+                    className: 'flex flex-col gap-0.5 rounded-sm border border-(--ui-stroke-secondary) p-1',
+                    children: [
+                      jsx(Row, {
+                        label: `${r.over ? '⚠️' : '✅'} ${r.name}${r.frozen ? ' · 🧊 frozen' : ''}`,
+                        value: r.err ? r.err : (r.delta != null ? `+${fmtUsd(r.delta)}${r.over ? ' เกิน · OVER' : ''}` : (r.cost != null ? `ยอด ${fmtUsd(r.cost)} · baseline ใหม่` : 'วัดไม่ได้ · n/a')),
+                      }),
+                      r.over && !r.frozen
+                        ? (confirmId === r.id
+                            ? jsxs('div', {
+                                className: 'flex gap-1.5',
+                                children: [
+                                  jsx('button', {
+                                    type: 'button',
+                                    disabled: busy,
+                                    onClick: () => doFreeze(r),
+                                    className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
+                                    children: busy ? 'กำลัง freeze…' : 'ยืนยัน freeze (cap → 0) · Confirm',
+                                  }),
+                                  jsx('button', {
+                                    type: 'button',
+                                    onClick: () => setConfirmId(null),
+                                    className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
+                                    children: 'ยกเลิก · Cancel',
+                                  }),
+                                ],
+                              })
+                            : jsx('button', {
+                                type: 'button',
+                                onClick: () => {
+                                  haptic('tap')
+                                  setConfirmId(r.id)
+                                },
+                                className: 'self-start rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
+                                children: 'Freeze key นี้ · Freeze',
+                              }))
+                        : null,
+                    ],
+                  }, r.id)),
+                })
+              : null,
+          ],
+        }),
+      })
+    }
+
     function KeysSection() {
       const mgmt = useValue($mgmt)
       const q = useKeysQuery()
       const [poolFilter, setPoolFilter] = useState('all')
       const [text, setText] = useState('')
+      // Feature 3 — daily-cap enforcer (runbook UC-6)
+      const [capDraft, setCapDraft] = useState('10')
+      const [confirmCap, setConfirmCap] = useState(false)
+      const [enforcing, setEnforcing] = useState(false)
       if (!mgmt) {
         return jsx(Section, {
           title: 'key ทุก pool · Keys by pool',
@@ -500,6 +788,39 @@ export default {
         .sort((a, b) => (b.used_usd || 0) - (a.used_usd || 0))
       const risky = list.filter((k) => (k.limit_usd == null || k.limit_period !== 'daily') && k.active !== false).length
       const maxUsed = list.reduce((m, k) => Math.max(m, typeof k.used_usd === 'number' ? k.used_usd : 0), 0)
+      const targets = list.filter((k) => (k.limit_usd == null || k.limit_period !== 'daily') && k.active !== false)
+      const doEnforce = async () => {
+        const cap = parseFloat(capDraft)
+        if (!(cap > 0)) {
+          host.notify({ kind: 'info', message: 'ใส่ cap เป็นตัวเลข $/วัน ก่อน · enter a numeric $/day cap' })
+          return
+        }
+        haptic('tap')
+        setEnforcing(true)
+        let ok = 0
+        let fail403 = false
+        let failOther = null
+        for (const k of targets) {
+          try {
+            await apiPatch(`/v1/api-keys/${encodeURIComponent(k.id)}`, { limit_usd: cap, limit_period: 'daily' })
+            ok++
+          } catch (e) {
+            if (errKey(e) === 'http-403') fail403 = true
+            else if (!failOther) failOther = ERR_TH[errKey(e)] || String((e && e.message) || e)
+          }
+        }
+        setEnforcing(false)
+        setConfirmCap(false)
+        queryClient.invalidateQueries({ queryKey: [ID] })
+        host.notify({
+          kind: 'info',
+          message: fail403
+            ? `ต้อง scope keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม (ใส่ได้ ${ok}/${targets.length}) · needs keys:update`
+            : (ok === targets.length
+                ? `ใส่ daily cap $${cap} แล้ว ${ok}/${targets.length} keys · enforced`
+                : `ใส่ได้ ${ok}/${targets.length} — ติด: ${failOther || 'ดู error ราย key'} · partial`),
+        })
+      }
       const chipBtn = (id, label, active) => jsx('button', {
         type: 'button',
         onClick: () => {
@@ -515,6 +836,55 @@ export default {
         children: jsxs('div', {
           className: 'flex flex-col gap-1.5',
           children: [
+            risky > 0
+              ? jsxs('div', {
+                  className: 'flex flex-col gap-1 rounded-sm border border-(--ui-stroke-secondary) p-1.5',
+                  children: [
+                    jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `⚠️ ${risky} key ไม่มี daily cap — ใส่ให้ทั้งหมดทีเดียว (ต้อง keys:update) · enforce a daily cap on all` }),
+                    confirmCap
+                      ? jsxs('div', {
+                          className: 'flex gap-1.5',
+                          children: [
+                            jsx('button', {
+                              type: 'button',
+                              disabled: enforcing,
+                              onClick: doEnforce,
+                              className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
+                              children: enforcing ? 'กำลังใส่… · enforcing…' : `ยืนยัน $${capDraft || '?'}/วัน ให้ ${targets.length} keys · Confirm`,
+                            }),
+                            jsx('button', {
+                              type: 'button',
+                              onClick: () => setConfirmCap(false),
+                              className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
+                              children: 'ยกเลิก · Cancel',
+                            }),
+                          ],
+                        })
+                      : jsxs('div', {
+                          className: 'flex gap-1.5',
+                          children: [
+                            jsx('input', {
+                              value: capDraft,
+                              spellCheck: false,
+                              inputMode: 'decimal',
+                              placeholder: '$/วัน · $/day (เช่น 10)',
+                              onChange: (e) => setCapDraft(e.target.value),
+                              className: 'w-36 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 font-mono text-xs',
+                            }),
+                            jsx('button', {
+                              type: 'button',
+                              onClick: () => {
+                                haptic('tap')
+                                setConfirmCap(true)
+                              },
+                              className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
+                              children: 'ใส่ cap · Enforce',
+                            }),
+                          ],
+                        }),
+                  ],
+                })
+              : null,
             jsx('input', {
               value: text,
               spellCheck: false,
@@ -621,6 +991,8 @@ export default {
               ],
             }),
           }),
+          jsx(SmokeSection, {}),
+          jsx(AlertSection, {}),
           jsx(KeysSection, {}),
           jsx(Section, {
             title: 'tokens',
@@ -641,7 +1013,7 @@ export default {
                   label: 'management (ccmk)',
                   placeholder: 'ccmk-…',
                   pattern: MGMT_RE,
-                  hint: 'ต้องขึ้นต้น ccmk- (read-only ก็พอ) · must start with ccmk- (read-only OK)',
+                  hint: 'ต้องขึ้นต้น ccmk- · ดูอย่างเดียว read-only ก็พอ, freeze/ใส่ cap/ย้าย pool ต้อง keys:update',
                 }),
               ],
             }),

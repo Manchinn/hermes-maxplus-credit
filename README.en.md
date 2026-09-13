@@ -32,11 +32,21 @@ Then enable **MaxPlus Credit** in-app (ships opt-in).
 2. Add your **inference token** (`ccsk-…`) for balance + account usage.
 3. Add your **management token** (`ccmk-…`) for the all-keys table.
    - `keys:read` + `usage:read` scopes are enough for read-only viewing.
-   - Add `keys:update` only if you want in-plugin pool moves.
+   - Add `keys:update` only for in-plugin pool moves, freeze and cap enforcing.
 
 Move pool: per-key **Move** button → pick a pool → confirm.
 The secret stays valid — just point your client at the shown base URL
 (click it to copy).
+
+Smoke test: **Run** — checks `me → models → chat` (16 tokens) in one tap,
+using this key's pool. No cURL copy-paste.
+
+Anomaly scan: set a threshold → **Scan** (first scan sets the baseline,
+later scans diff against it) → over-spending keys get a **Freeze** button
+(cap → 0, restore in Dashboard).
+
+Enforce caps: when keys lack a daily cap, an **Enforce** bar appears —
+apply a daily cap to all of them at once (always confirmed first).
 
 > Moved keys 403 until clients follow — don't move a key that is in use.
 
@@ -45,7 +55,7 @@ The secret stays valid — just point your client at the shown base URL
 - Tokens stay in the app's local per-plugin storage, never in this repo.
 - Calls `https://api.maxplus-ai.cc` directly from your machine.
   No backend, no telemetry.
-- Read-only by default; writes happen only on confirmed pool moves.
+- Read-only by default; writes happen only on confirmed actions (pool move / freeze / cap enforce).
 
 ## Files
 
