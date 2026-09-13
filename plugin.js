@@ -228,6 +228,13 @@ export default {
     // keeps the same secret — only the client's base URL must change.
     const POOLS = ['native', 'grok-lite', 'grok-fast', 'grok', 'deepseek', 'glm-deepseek-cheaper', 'glm', 'gemini', 'gpt-pro', 'gpt-lite', 'gpt-image', 'claude-aws', 'free']
 
+    // แท็บช่วงเวลาใช้ร่วมกันทั้ง chip popup และหน้าเต็ม
+    const PERIODS = [
+      { id: '1d', label: '24 ชม.' },
+      { id: '7d', label: '7 วัน' },
+      { id: '30d', label: '30 วัน' },
+    ]
+
     function baseFor(pool) {
       const p = String(pool || 'auto')
       return p === 'native' ? `${API}/v1` : `${API}/${p}/v1`
@@ -268,16 +275,6 @@ export default {
       return res.json()
     }
 
-    // Best-effort per-key spend out of /v1/api-keys/{id}/usage.
-    // Real shape varies ({totals…} vs {key:{used_usd…}}) — callers that need
-    // a 24h number should diff against a stored baseline, never trust one shot.
-    function usageCost(d, k) {
-      const v = costOf(totalsOf(d)) ?? (typeof d.cost_usd === 'number' ? d.cost_usd : null)
-      if (v != null) return v
-      const acc = (d && d.key && d.key.used_usd) ?? (k && k.used_usd)
-      return typeof acc === 'number' ? acc : null
-    }
-
     function useMeQuery() {
       const token = useValue($token)
       return useQuery({
@@ -316,11 +313,6 @@ export default {
       const token = useValue($token)
       const me = useMeQuery()
       const [period, setPeriod] = useState('1d')
-      const PERIODS = [
-        { id: '1d', label: '24 ชม.' },
-        { id: '7d', label: '7 วัน' },
-        { id: '30d', label: '30 วัน' },
-      ]
       const refresh = () => {
         haptic('tap')
         queryClient.invalidateQueries({ queryKey: [ID] })
@@ -682,6 +674,7 @@ export default {
                 : u.error
                   ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: ERR_TH[errKey(u.error)] || 'ดูไม่ได้' })
                   : (() => {
+                      // shape จริงของ /v1/api-keys/{id}/usage แปรผัน ({totals…} vs {key:{used_usd…}})
                       const d = u.data || {}
                       const v = costOf(totalsOf(d)) ?? (typeof d.cost_usd === 'number' ? d.cost_usd : null)
                       if (v != null) return jsx(Row, { label: 'ยอดใช้ key', value: fmtUsd(v) })
@@ -697,256 +690,6 @@ export default {
     // Feature 1 — one-click smoke test (runbook §5.4):
     // me → models of this key's pool → tiny non-stream chat.
     // Pass = 200 + content on every step (not 401/403) with sane latency.
-    function SmokeSection() {
-      const token = useValue($token)
-      const [running, setRunning] = useState(false)
-      const [steps, setSteps] = useState(null)
-      if (!token) return null
-      const run = async () => {
-        if (running) return
-        haptic('tap')
-        setRunning(true)
-        try {
-        const out = []
-        const push = (s) => {
-          out.push(s)
-          setSteps([...out])
-        }
-        const timed = async (name, fn) => {
-          const t0 = Date.now()
-          try {
-            const d = await fn()
-            push({ name, ok: true, ms: Date.now() - t0, extra: typeof d === 'string' ? d : null })
-            return d
-          } catch (e) {
-            push({ name, ok: false, ms: Date.now() - t0, extra: null, err: ERR_TH[errKey(e)] || String((e && e.message) || e) })
-            return null
-          }
-        }
-        let me = null
-        await timed('1/3 · /v1/me', async () => {
-          me = await apiWith(token, '/v1/me')
-          const k = pickKey(me)
-          return `pool ${k.pool} · ${fmtUsd(me.credit_usd)}`
-        })
-        let pool = 'native'
-        if (me) {
-          const k = pickKey(me)
-          if (k.pool && k.pool !== '—') pool = k.pool
-        }
-        let ids = []
-        const models = me
-          ? await timed(`2/3 · models ของ pool ${pool}`, async () => {
-              const md = await apiUrl(token, `${baseFor(pool)}/models`)
-              const raw = md.data || md.models || []
-              ids = (Array.isArray(raw) ? raw : [])
-                .map((x) => (typeof x === 'string' ? x : x && x.id))
-                .filter((x) => typeof x === 'string')
-              return `${ids.length} โมเดล`
-            })
-          : null
-        if (models) {
-          const chatModel = ids.find((id) => !/image|embed|tts|whisper/i.test(id)) || ids[0] || null
-          if (!chatModel) {
-            push({ name: '3/3 · chat — ไม่มี chat model ใน catalog', ok: false, ms: 0, extra: null, err: 'catalog ว่าง/มีแต่ image' })
-          } else {
-            await timed(`3/3 · chat ${chatModel} (16 tokens)`, async () => {
-              const r = await apiUrl(token, `${baseFor(pool)}/chat/completions`, {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ model: chatModel, max_tokens: 16, stream: false, messages: [{ role: 'user', content: 'Reply exactly: pong' }] }),
-              })
-              const c = r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content
-              if (!c) throw new Error('ตอบกลับไม่มี content')
-              return `\u201C${String(c).slice(0, 40)}\u201D`
-            })
-          }
-        }
-        const fails = out.filter((s) => !s.ok).length
-        host.notify({ kind: 'info', message: fails ? `smoke จบ: ❌ ${fails}/${out.length} ขั้น` : `smoke ผ่าน ${out.length}/${out.length} ✅` })
-        } finally {
-          setRunning(false)
-        }
-      }
-      return jsx(Section, {
-        title: 'ตรวจสายส่ง (§5.4)',
-        right: jsx('button', {
-          type: 'button',
-          disabled: running,
-          onClick: run,
-          className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-          children: running ? 'กำลังรัน…' : 'รัน smoke test',
-        }),
-        children: !steps
-          ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'กดรัน: me → models ของ pool key นี้ → chat non-stream 16 tokens' })
-          : jsxs('div', {
-              className: 'flex flex-col gap-0.5',
-              children: steps.map((s, i) => jsx(Row, {
-                label: `${s.ok ? '✅' : '❌'} ${s.name}`,
-                value: s.ok ? `${s.ms}ms${s.extra ? ` · ${s.extra}` : ''}` : (s.err || 'ไม่ผ่าน'),
-              }, i)),
-            }),
-      })
-    }
-
-    // Feature 2 — cost-anomaly scan + freeze (runbook UC-3).
-    // Delta vs a stored baseline (never one shot): first scan saves the
-    // baseline, later scans flag keys whose spend grew past the threshold.
-    // Flagged rows get a 2-step Freeze (PATCH limit_usd 0, needs keys:update).
-    function AlertSection() {
-      const mgmt = useValue($mgmt)
-      const q = useKeysQuery()
-      const [th, setTh] = useState('20')
-      const [scanning, setScanning] = useState(false)
-      const [prog, setProg] = useState('')
-      const [rows, setRows] = useState(null)
-      const [confirmId, setConfirmId] = useState(null)
-      const [busy, setBusy] = useState(false)
-      if (!mgmt) return null
-      const list = !q.isLoading && !q.error ? pickKeyList(q.data) : []
-      const readBase = () => {
-        try { return ctx.storage.get('baseline', null) } catch { return null }
-      }
-      const baseTs = (() => {
-        const b = readBase()
-        return b && b.ts ? new Date(b.ts).toLocaleString() : null
-      })()
-      const scan = async () => {
-        const limit = parseFloat(th)
-        if (!(limit > 0)) {
-          host.notify({ kind: 'info', message: 'ใส่ threshold เป็นตัวเลข $/รอบ ก่อน' })
-          return
-        }
-        if (!list.length) {
-          host.notify({ kind: 'info', message: 'ยังไม่มีรายการ key — รอโหลดตาราง key ก่อน' })
-          return
-        }
-        haptic('tap')
-        setScanning(true)
-        setRows(null)
-        setConfirmId(null)
-        const base = readBase()
-        const baseCosts = (base && base.costs) || {}
-        const out = []
-        for (let i = 0; i < list.length; i++) {
-          const k = list[i]
-          setProg(`สแกน ${i + 1}/${list.length} · ${k.name || k.id}`)
-          let cost = null
-          let err = null
-          try {
-            cost = usageCost(await fetchKeyUsage(k.id), k)
-          } catch (e) {
-            err = ERR_TH[errKey(e)] || String((e && e.message) || e)
-          }
-          const b = typeof baseCosts[k.id] === 'number' ? baseCosts[k.id] : null
-          const delta = cost != null && b != null ? cost - b : null
-          out.push({ id: k.id, name: k.name || k.id, cost, base: b, delta, over: delta != null && delta > limit, err, frozen: false })
-          setRows([...out])
-        }
-        try {
-          ctx.storage.set('baseline', { ts: Date.now(), costs: Object.fromEntries(out.filter((r) => r.cost != null).map((r) => [r.id, r.cost])) })
-        } catch { /* storage full/blocked — scan results above still stand */ }
-        setProg('')
-        setScanning(false)
-        const overs = out.filter((r) => r.over).length
-        host.notify({
-          kind: 'info',
-          message: !base
-            ? `ตั้ง baseline แล้ว (${out.length} keys) — สแกนอีกครั้งเพื่อเทียบส่วนต่าง`
-            : (overs ? `⚠️ ${overs} key ใช้เกิน $${limit} จาก baseline` : `✅ ทุก key ต่ำกว่า $${limit} จาก baseline`),
-        })
-      }
-      const doFreeze = async (row) => {
-        setBusy(true)
-        try {
-          await apiPatch(`/v1/api-keys/${encodeURIComponent(row.id)}`, { limit_usd: 0 })
-          setRows((prev) => (prev || []).map((r) => (r.id === row.id ? { ...r, frozen: true } : r)))
-          queryClient.invalidateQueries({ queryKey: [ID] })
-          host.notify({ kind: 'info', message: `แช่แข็ง ${row.name} แล้ว (cap 0) — ปลดเองใน Dashboard` })
-        } catch (e) {
-          host.notify({ kind: 'info', message: errKey(e) === 'http-403' ? 'ต้อง scope keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม' : (ERR_TH[errKey(e)] || 'แช่แข็งไม่สำเร็จ') })
-        } finally {
-          setBusy(false)
-          setConfirmId(null)
-        }
-      }
-      return jsx(Section, {
-        title: `จับงบไหม้ (UC-3)${baseTs ? ` · baseline ${baseTs}` : ''}`,
-        right: jsx('button', {
-          type: 'button',
-          disabled: scanning,
-          onClick: scan,
-          className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-          children: scanning ? 'กำลังสแกน…' : 'สแกน',
-        }),
-        children: jsxs('div', {
-          className: 'flex flex-col gap-1',
-          children: [
-            jsxs('div', {
-              className: 'flex items-center gap-1.5',
-              children: [
-                jsx('span', { className: 'shrink-0 text-xs text-(--ui-text-tertiary)', children: 'เกิน $/รอบ' }),
-                jsx('input', {
-                  value: th,
-                  spellCheck: false,
-                  inputMode: 'decimal',
-                  placeholder: '20',
-                  onChange: (e) => setTh(e.target.value),
-                  className: 'w-20 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 font-mono text-xs',
-                }),
-                jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: 'สแกนแรก = ตั้ง baseline' }),
-              ],
-            }),
-            prog ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: prog }) : null,
-            rows && rows.length
-              ? jsxs('div', {
-                  className: 'flex flex-col gap-0.5',
-                  children: rows.map((r) => jsxs('div', {
-                    className: 'flex flex-col gap-0.5 rounded-sm border border-(--ui-stroke-secondary) p-1',
-                    children: [
-                      jsx(Row, {
-                        label: `${r.over ? '⚠️' : '✅'} ${r.name}${r.frozen ? ' · 🧊 แช่แข็งแล้ว' : ''}`,
-                        value: r.err ? r.err : (r.delta != null ? `+${fmtUsd(r.delta)}${r.over ? ' เกิน' : ''}` : (r.cost != null ? `ยอด ${fmtUsd(r.cost)} (baseline ใหม่)` : 'วัดไม่ได้')),
-                      }),
-                      r.over && !r.frozen
-                        ? (confirmId === r.id
-                            ? jsxs('div', {
-                                className: 'flex gap-1.5',
-                                children: [
-                                  jsx('button', {
-                                    type: 'button',
-                                    disabled: busy,
-                                    onClick: () => doFreeze(r),
-                                    className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                                    children: busy ? 'กำลังแช่แข็ง…' : 'ยืนยันแช่แข็ง (cap → 0)',
-                                  }),
-                                  jsx('button', {
-                                    type: 'button',
-                                    onClick: () => setConfirmId(null),
-                                    className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                                    children: 'ยกเลิก',
-                                  }),
-                                ],
-                              })
-                            : jsx('button', {
-                                type: 'button',
-                                onClick: () => {
-                                  haptic('tap')
-                                  setConfirmId(r.id)
-                                },
-                                className: 'self-start rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                                children: 'แช่แข็ง key นี้',
-                              }))
-                        : null,
-                    ],
-                  }, r.id)),
-                })
-              : null,
-          ],
-        }),
-      })
-    }
-
     function KeysSection() {
       const mgmt = useValue($mgmt)
       const q = useKeysQuery()
@@ -1154,6 +897,7 @@ export default {
     }
 
     function StatusPage() {
+      const [usagePeriod, setUsagePeriod] = useState('1d')
       const refresh = () => {
         queryClient.invalidateQueries({ queryKey: [ID] })
         host.notify({ kind: 'info', message: 'รีเฟรช MaxPlus แล้ว' })
@@ -1178,16 +922,26 @@ export default {
             title: 'usage บัญชี',
             right: jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: '24 ชม. รีเฟรชทุก 15 วิ' }),
             children: jsxs('div', {
-              className: 'flex flex-col',
+              className: 'flex flex-col gap-2',
               children: [
-                jsx(UsageBlock, { period: '1d', label: '24 ชม. ' }),
-                jsx(UsageBlock, { period: '7d', label: '7 วัน ' }),
-                jsx(UsageBlock, { period: '30d', label: '30 วัน ' }),
+                jsx('div', {
+                  className: 'flex gap-1',
+                  children: PERIODS.map((p) => jsx('button', {
+                    type: 'button',
+                    onClick: () => {
+                      haptic('tap')
+                      setUsagePeriod(p.id)
+                    },
+                    className: 'flex-1 rounded-sm border px-2 py-0.5 text-xs ' + (usagePeriod === p.id
+                      ? 'border-(--ui-accent) text-foreground'
+                      : 'border-(--ui-stroke-secondary) text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)'),
+                    children: p.label,
+                  }, p.id)),
+                }),
+                jsx(UsageBlock, { period: usagePeriod, label: '' }),
               ],
             }),
           }),
-          jsx(SmokeSection, {}),
-          jsx(AlertSection, {}),
           jsx(KeysSection, {}),
           jsx(Section, {
             title: 'tokens',

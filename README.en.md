@@ -37,7 +37,7 @@ Then enable **MaxPlus Credit** in-app (ships opt-in).
 2. Add your **inference token** (`ccsk-…`) for balance + account usage.
 3. Add your **management token** (`ccmk-…`) for the all-keys table.
    - `keys:read` + `usage:read` scopes are enough for read-only viewing.
-   - Add `keys:update` only for in-plugin pool moves, freeze and cap enforcing.
+   - Add `keys:update` only for in-plugin pool moves and cap enforcing.
 
 The status-bar chip shows the balance (`MaxPlus $xx.xx`, polls every 60s) —
 click it for an instant **summary popup**, no need to open the full page.
@@ -46,12 +46,8 @@ Move pool: per-key **Move** button → pick a pool → confirm.
 The secret stays valid — just point your client at the shown base URL
 (click it to copy).
 
-Smoke test: **รัน smoke test (Run)** — checks `me → models → chat` (16 tokens) in one tap,
-using this key's pool. No cURL copy-paste.
-
-Anomaly scan: set a threshold → **สแกน (Scan)** (first scan sets the baseline,
-later scans diff against it) → over-spending keys get an **แช่แข็ง (Freeze)** button
-(cap → 0, restore in Dashboard).
+Account usage: **24h / 7d / 30d** tabs — shows `requests · tokens · cost` for the
+selected range (the 24h range refreshes every 15s).
 
 Enforce caps: when keys lack a daily cap, an **ใส่ cap (Enforce)** bar appears —
 apply a daily cap to all of them at once (always confirmed first).
@@ -63,7 +59,7 @@ apply a daily cap to all of them at once (always confirmed first).
 | Part | Contents |
 | --- | --- |
 | Chip + popup (right status bar) | Balance polled every 60s · click for popup: balance + pool/status + daily free credit (when the account has it) + cap bar (only for keys that have a cap) + compact usage with period tabs (24h / 7d / 30d: requests · tokens · cost) + open-full-page/refresh buttons |
-| MaxPlus page (`/maxplus`) | Credit hero + burn pace + daily free credit · account usage 1d/7d/30d (24h refreshes every 15s) · smoke test · anomaly scan + freeze · keys table (search/pool filter/sort by spend) + pool moves · token fields · morning checklist |
+| MaxPlus page (`/maxplus`) | Credit hero + burn pace + daily free credit · account usage in 24h/7d/30d tabs (`requests · tokens · cost`) · keys table (search/pool filter/sort by spend) + pool moves · cap enforcing · token fields · morning checklist |
 | ⌘K commands | `MaxPlus: เปิดหน้าสถานะ (Open)` · `MaxPlus: รีเฟรชเครดิต (Refresh)` · `MaxPlus: ลบ tokens (Clear)` |
 
 > **About the balance:** `credit_usd` is **account-level** — every pool draws from the

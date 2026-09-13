@@ -38,7 +38,7 @@ hermes://plugin/install?repo=Manchinn/hermes-maxplus-credit&enable=1
 2. ใส่ **inference token** (`ccsk-…`) — โชว์เครดิต + usage บัญชี
 3. ใส่ **management token** (`ccmk-…`) — โชว์ key ทั้งบัญชีแยกตาม pool
    - scope `keys:read` + `usage:read` ก็พอสำหรับดูอย่างเดียว
-   - ติ๊ก `keys:update` เพิ่มถ้าจะย้าย pool / freeze / ใส่ cap จากใน plugin
+   - ติ๊ก `keys:update` เพิ่มถ้าจะย้าย pool / ใส่ cap จากใน plugin
 
 chip ที่ status bar ขวาโชว์ยอดคงเหลือ (`MaxPlus $xx.xx`, poll ทุก 60 วิ) —
 กดแล้วเด้ง **popup สรุป** ทันที ไม่ต้องเข้าหน้าเต็ม
@@ -47,11 +47,8 @@ chip ที่ status bar ขวาโชว์ยอดคงเหลือ (`
 secret เดิมยังใช้ได้ แค่เปลี่ยน base URL ที่ client ให้ตรง
 (ปุ่ม base URL กดเพื่อ copy ได้เลย)
 
-smoke test: กด **รัน smoke test** — ตรวจ `me → models → chat` 16 tokens ทีเดียว
-(ใช้ pool ของ key นี้, ไม่ต้องก๊อป cURL)
-
-จับงบไหม้: ตั้ง threshold → กด **สแกน** (ครั้งแรก = ตั้ง baseline,
-ครั้งถัดไปเทียบส่วนต่าง) → key ไหนเกินมีปุ่ม **แช่แข็ง** (cap → 0, ปลดใน Dashboard)
+usage บัญชี: แท็บ **24 ชม. / 7 วัน / 30 วัน** — โชว์ `requests · tokens · cost`
+ของช่วงที่เลือก (ช่วง 24 ชม. รีเฟรชทุก 15 วิ)
 
 ใส่ cap: ถ้ามี key ไม่มี daily cap จะมีแถบ **ใส่ cap** —
 ใส่ daily cap ให้ทุก key ที่ขาดทีเดียว (ยืนยันก่อนเสมอ)
@@ -64,7 +61,7 @@ smoke test: กด **รัน smoke test** — ตรวจ `me → models → 
 | ส่วน | มีอะไร |
 | --- | --- |
 | chip + popup (status bar ขวา) | ยอดคงเหลือ poll 60 วิ · กดดู popup: ยอด + pool/สถานะ + เครดิตฟรีรายวัน (ถ้ามี) + แถบ cap (เฉพาะ key ที่มี cap) + usage ย่อแบบเลือกช่วงได้ (24 ชม. / 7 วัน / 30 วัน: requests · tokens · cost) + ปุ่มเปิดหน้าเต็ม/รีเฟรช |
-| หน้า MaxPlus (`/maxplus`) | hero เครดิต + burn pace + เครดิตฟรีรายวัน · usage บัญชี 1d/7d/30d (24 ชม. รีเฟรชทุก 15 วิ) · smoke test · จับงบไหม้ + แช่แข็ง · ตาราง key (ค้นหา/กรอง pool/เรียงตามยอด) + ย้าย pool · ช่องใส่/ลบ token · เช็กลิสต์เช้า |
+| หน้า MaxPlus (`/maxplus`) | hero เครดิต + burn pace + เครดิตฟรีรายวัน · usage บัญชีเป็นแท็บ 24 ชม./7 วัน/30 วัน (`requests · tokens · cost`) · ตาราง key (ค้นหา/กรอง pool/เรียงตามยอด) + ย้าย pool · ใส่ cap · ช่องใส่/ลบ token · เช็กลิสต์เช้า |
 | คำสั่ง ⌘K | `MaxPlus: เปิดหน้าสถานะ` · `MaxPlus: รีเฟรชเครดิต` · `MaxPlus: ลบ tokens` |
 
 > **เรื่องยอดเงิน:** `credit_usd` เป็น **ระดับบัญชี** — ทุก pool กินถังเดียวกัน
