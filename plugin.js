@@ -119,6 +119,24 @@ function tokensOf(t) {
   )
 }
 
+// ลิสต์ของ <select> ถูกวาดโดย Chromium (ไม่ใช่ DOM ของแอป) จึงไม่รับธีมเอง —
+// เดา scheme จากความสว่างของสีตัวอักษรจริงในธีมปัจจุบัน (ธีมมืด = ตัวอักษรสว่าง)
+// ลำดับ: สีตัวอักษรแบบ rgb → color-scheme ของ root → ค่าเริ่มต้น dark
+function schemeOf(el) {
+  const lum = (c) => {
+    const m = /rgba?\(\s*(\d+)\s*[,\s]\s*(\d+)\s*[,\s]\s*(\d+)/.exec(String(c || ''))
+    return m ? 0.299 * +m[1] + 0.587 * +m[2] + 0.114 * +m[3] : null
+  }
+  try {
+    const l = lum(getComputedStyle(el).color)
+    if (l != null) return l > 140 ? 'dark' : 'light'
+    const cs = String(getComputedStyle(document.documentElement).colorScheme || '')
+    if (cs.includes('dark') && !cs.includes('light')) return 'dark'
+    if (cs.includes('light') && !cs.includes('dark')) return 'light'
+  } catch { /* ไม่มี DOM จริง (unit test) — ใช้ค่าเริ่มต้น */ }
+  return 'dark'
+}
+
 function pickKey(me) {
   const k = (me && me.key) || {}
   const f = (me && me.daily_free_credit) || {}
@@ -555,6 +573,7 @@ export default {
       const [moveOpen, setMoveOpen] = useState(false)
       const [dest, setDest] = useState(String(k.pool || 'auto'))
       const [busy, setBusy] = useState(false)
+      const [scheme, setScheme] = useState('dark')
       const noCap = k.limit_usd == null || k.limit_period !== 'daily'
       const used = typeof k.used_usd === 'number' ? k.used_usd : null
       const curPool = String(k.pool || 'auto')
@@ -657,8 +676,18 @@ export default {
                       jsx('select', {
                         value: dest,
                         onChange: (e) => setDest(e.target.value),
+                        // ลิสต์ของ <select> ถูกวาดโดย Chromium ไม่ใช่ DOM ของแอป → ต้องบอก
+                        // color-scheme เอง ไม่งั้นธีมมืดจะได้ลิสต์สีสว่างตัดกัน
+                        // อ่านสีตัวอักษรจริงของธีมตอนกด แล้วเลือก scheme ให้ตรง (รองรับ light skin ด้วย)
+                        onMouseDown: (e) => setScheme(schemeOf(e.currentTarget)),
+                        onFocus: (e) => setScheme(schemeOf(e.currentTarget)),
+                        style: { colorScheme: scheme },
                         className: 'min-w-0 flex-1 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 font-mono text-xs',
-                        children: POOLS.map((p) => jsx('option', { value: p, children: p }, p)),
+                        children: POOLS.map((p) => jsx('option', {
+                          value: p,
+                          style: { backgroundColor: 'var(--ui-bg-elevated, #1e1e1e)', color: 'var(--ui-text-primary, inherit)' },
+                          children: p,
+                        }, p)),
                       }),
                       jsx('button', {
                         type: 'button',
