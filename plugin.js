@@ -954,7 +954,7 @@ export default {
                   jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `cap ${fmtUsd(k.limit)} · ใช้ไป/used ${fmtUsd(k.used)} · เหลือ/left ${fmtUsd(k.limit - k.used)}` }),
                 ],
               })
-            : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `ใช้ไป/used ${fmtUsd(k.used)} · key นี้ไม่จำกัด cap · uncapped` }),
+            : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `key นี้ใช้สะสม/this key lifetime ${fmtUsd(k.used)} · ไม่จำกัด cap · uncapped` }),
         ],
       })
     }
