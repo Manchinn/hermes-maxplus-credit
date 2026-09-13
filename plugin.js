@@ -158,7 +158,7 @@ export default {
     const fetchMe = () => apiWith($token.get(), '/v1/me')
     const fetchUsage = (period) => apiWith($token.get(), `/v1/usage?period=${period}`)
     const fetchKeys = () => apiWith($mgmt.get(), '/v1/api-keys')
-    const fetchKeyUsage = (kid) => apiWith($mgmt.get(), `/v1/api-keys/${kid}/usage`)
+    const fetchKeyUsage = (kid) => apiWith($mgmt.get(), `/v1/api-keys/${encodeURIComponent(kid)}/usage`)
 
     // Common pools (see MaxPlus docs → Pool aliases). Moving a key with PATCH
     // keeps the same secret — only the client's base URL must change.
@@ -350,7 +350,7 @@ export default {
         }
         setBusy(true)
         try {
-          await apiPatch(`/v1/api-keys/${k.id}`, { pool: dest })
+          await apiPatch(`/v1/api-keys/${encodeURIComponent(k.id)}`, { pool: dest })
           queryClient.invalidateQueries({ queryKey: [ID] })
           setMoveOpen(false)
           host.notify({ kind: 'info', message: `ย้าย ${k.name || k.id} → ${dest} แล้ว · moved — เปลี่ยน base URL ที่ client เป็น ${baseFor(dest)} (secret เดิมใช้ได้ · same secret)` })
