@@ -5,7 +5,7 @@
 
 ## 1. เปิดหน้าติดตั้ง · Open installer
 
-Desktop → **Settings → Capabilities → Plugins** → **Install from Git**
+Desktop → **Settings → Plugins** → **Install from Git**
 วาง repo นี้ · paste this repo:
 
 ```
@@ -27,7 +27,7 @@ Install → flip the toggle on.
 เปิดหน้า **MaxPlus** จาก sidebar:
 
 1. ช่อง **inference (ccsk)** — เอา `ccsk-…` จาก
-   [MaxPlus Dashboard](https://maxplus-ai.cc/dashboard) มาใส่ กดบันทึก ·
+   [MaxPlus Dashboard](https://maxplus-ai.cc/invite/ZSPXWCJB) มาใส่ กดบันทึก ·
    credit + usage บัญชีจะขึ้น
 2. ช่อง **management (ccmk)** — สร้างใน Dashboard → API Access
    ติ๊ก `keys:read` + `usage:read` (ดูอย่างเดียว) ·

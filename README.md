@@ -2,7 +2,7 @@
 
 🌏 README in [English](README.en.md)
 
-ดูเครดิต + usage + key ทุก pool ของ [MaxPlus](https://maxplus-ai.cc) ใน
+ดูเครดิต + usage + key ทุก pool ของ [MaxPlus](https://maxplus-ai.cc/invite/ZSPXWCJB) ใน
 Hermes Desktop หน้า UI สองภาษา (ไทย·English)
 
 ![status page](docs/status.png)
@@ -11,7 +11,7 @@ Hermes Desktop หน้า UI สองภาษา (ไทย·English)
 
 ## ติดตั้ง
 
-**Install from Git** (Settings → Capabilities → Plugins) แล้วใส่ repo นี้
+**Install from Git** (Settings → Plugins) แล้วใส่ repo นี้
 หรือกดลิงก์:
 
 ```
@@ -24,7 +24,7 @@ hermes://plugin/install?repo=Manchinn/hermes-maxplus-credit&enable=1
 hermes plugins install Manchinn/hermes-maxplus-credit --ref <40-char-sha> --enable
 ```
 
-จากนั้นเปิดในแอป: Capabilities → Plugins → เปิด **MaxPlus Credit**
+จากนั้นเปิดในแอป: Settings → Plugins → เปิด **MaxPlus Credit**
 (มาแบบ opt-in)
 
 ## ใช้งาน

@@ -5,7 +5,7 @@
 
 ## 1. Open installer
 
-Desktop → **Settings → Capabilities → Plugins** → **Install from Git**,
+Desktop → **Settings → Plugins** → **Install from Git**,
 paste:
 
 ```
@@ -26,7 +26,7 @@ Review the dialog → **Install** → back on the Plugins page, flip
 Open **MaxPlus** from the sidebar:
 
 1. **inference (ccsk)** slot — paste `ccsk-…` from the
-   [MaxPlus Dashboard](https://maxplus-ai.cc/dashboard) → Save.
+   [MaxPlus Dashboard](https://maxplus-ai.cc/invite/ZSPXWCJB) → Save.
 2. **management (ccmk)** slot — create under Dashboard → API Access with
    `keys:read` + `usage:read` (read-only).
 

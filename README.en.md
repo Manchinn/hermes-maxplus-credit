@@ -2,7 +2,7 @@
 
 🌏 README in [ไทย](README.md)
 
-View [MaxPlus](https://maxplus-ai.cc) credit, usage and per-pool keys
+View [MaxPlus](https://maxplus-ai.cc/invite/ZSPXWCJB) credit, usage and per-pool keys
 inside Hermes Desktop. Bilingual UI (Thai · English).
 
 ![status page](docs/status.png)
@@ -11,7 +11,7 @@ inside Hermes Desktop. Bilingual UI (Thai · English).
 
 ## Install
 
-**Install from Git** (Settings → Capabilities → Plugins) with this repo,
+**Install from Git** (Settings → Plugins) with this repo,
 or click:
 
 ```
