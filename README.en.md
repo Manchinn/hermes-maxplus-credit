@@ -7,6 +7,10 @@ inside Hermes Desktop. Thai UI.
 
 ![status page](docs/status.png)
 
+Chip + summary popup (amounts masked in the sample):
+
+![chip popup](docs/popup.png)
+
 📖 [Step-by-step install](docs/INSTALL.en.md) · [ติดตั้งทีละขั้น](docs/INSTALL.th.md)
 
 ## Install

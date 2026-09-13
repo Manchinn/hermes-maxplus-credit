@@ -7,6 +7,10 @@ Hermes Desktop หน้า UI ภาษาไทย
 
 ![status page](docs/status.png)
 
+chip + popup สรุป (ยอดเงินถูกปิดในภาพตัวอย่าง):
+
+![chip popup](docs/popup.png)
+
 📖 [ติดตั้งทีละขั้น](docs/INSTALL.th.md) · [Step-by-step install](docs/INSTALL.en.md)
 
 ## ติดตั้ง
