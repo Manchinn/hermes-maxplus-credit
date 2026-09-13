@@ -19,7 +19,7 @@ https://github.com/Manchinn/hermes-maxplus-credit
 Review the dialog → **Install** → back on the Plugins page, flip
 **MaxPlus Credit** on (ships opt-in).
 
-<!-- TODO shot: 02-enable.png -->
+![Plugins list](02-enable.png)
 
 ## 3. Add tokens
 

@@ -12,7 +12,7 @@ Desktop → **Settings → Capabilities → Plugins** → **Install from Git**
 https://github.com/Manchinn/hermes-maxplus-credit
 ```
 
-<!-- TODO shot: 01-install-from-git.png — หน้า Install from Git + ช่อง repo -->
+![Install from Git](01-install-from-git.png)
 
 ## 2. ตรวจ + ติดตั้ง · Review + install
 
@@ -20,7 +20,7 @@ https://github.com/Manchinn/hermes-maxplus-credit
 เปิดสวิตช์ **MaxPlus Credit** (มาแบบ opt-in) · Review the dialog →
 Install → flip the toggle on.
 
-<!-- TODO shot: 02-enable.png — แถว MaxPlus Credit + สวิตช์เปิด -->
+![หน้า Plugins](02-enable.png)
 
 ## 3. ใส่ token · Add tokens
 
