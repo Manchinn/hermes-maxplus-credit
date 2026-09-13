@@ -197,6 +197,10 @@ export default {
   register(ctx) {
     const $token = atom(ctx.storage.get('token', ''))
     const $mgmt = atom(ctx.storage.get('mgmt', ''))
+
+    // cleanup ครั้งเดียว (idempotent): 'baseline' เป็นของ "จับงบไหม้" ที่ถอดออกแล้ว
+    // (commit 3835fc5) — ไม่มีโค้ดอ่านค่านี้อีกแล้ว จึงลบทิ้งให้ storage สะอาด
+    try { ctx.storage.remove('baseline') } catch { /* ไม่มี key นี้แล้ว / storage ปิดอยู่ — ไม่เป็นไร */ }
     const $focusKey = atom(null)
 
     function setStored($a, storeKey, t) {
