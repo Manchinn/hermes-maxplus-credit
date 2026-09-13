@@ -22,14 +22,15 @@ chip + popup สรุป (ยอดเงินถูกปิดในภา�
 hermes://plugin/install?repo=Manchinn/hermes-maxplus-credit&enable=1
 ```
 
-หรือ CLI (ปักหมุด commit — แนะนำ):
+(ลิงก์เปิด dialog ให้กดยืนยันเอง ไม่ติดตั้งอัตโนมัติ)
 
-```bash
-hermes plugins install Manchinn/hermes-maxplus-credit --ref <40-char-sha> --enable
-```
-
+หลังติดตั้ง ไฟล์จะอยู่ที่ `desktop-plugins/hermes-maxplus-credit/plugin.js`
+— ชื่อโฟลเดอร์ใช้ชื่อ repo ส่วน `id` ข้างในคือ `maxplus-credit`
 จากนั้นเปิดในแอป: Settings → Plugins → เปิด **MaxPlus Credit**
 (มาแบบ opt-in)
+
+> token ไม่ได้อยู่ในโฟลเดอร์นี้ — เก็บใน storage ของแอปตาม `id`
+> ลบ/ลงใหม่แล้ว token เดิมยังอยู่
 
 ## ใช้งาน
 

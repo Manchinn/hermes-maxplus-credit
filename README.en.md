@@ -22,13 +22,14 @@ or click:
 hermes://plugin/install?repo=Manchinn/hermes-maxplus-credit&enable=1
 ```
 
-Or CLI (pinned — recommended):
+(The link opens the confirm dialog — it never auto-installs.)
 
-```bash
-hermes plugins install Manchinn/hermes-maxplus-credit --ref <40-char-sha> --enable
-```
-
+After install the file lands at `desktop-plugins/hermes-maxplus-credit/plugin.js`
+— folder name is the repo name, while the plugin `id` inside is `maxplus-credit`.
 Then enable **MaxPlus Credit** in-app (ships opt-in).
+
+> Tokens are not in that folder — they live in the app's per-plugin storage keyed
+> by `id`, so reinstall/delete keeps them.
 
 ## Usage
 
