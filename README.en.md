@@ -34,6 +34,9 @@ Then enable **MaxPlus Credit** in-app (ships opt-in).
    - `keys:read` + `usage:read` scopes are enough for read-only viewing.
    - Add `keys:update` only for in-plugin pool moves, freeze and cap enforcing.
 
+The status-bar chip shows the balance (`MaxPlus $xx.xx`, polls every 60s) —
+click it for an instant **summary popup**, no need to open the full page.
+
 Move pool: per-key **Move** button → pick a pool → confirm.
 The secret stays valid — just point your client at the shown base URL
 (click it to copy).
@@ -49,6 +52,14 @@ Enforce caps: when keys lack a daily cap, an **ใส่ cap (Enforce)** bar app
 apply a daily cap to all of them at once (always confirmed first).
 
 > Moved keys 403 until clients follow — don't move a key that is in use.
+
+## What each part does
+
+| Part | Contents |
+| --- | --- |
+| Chip + popup (right status bar) | Balance polled every 60s · click for popup: balance + pool/status + burn pace + cap bar + compact usage with period tabs (24h / 7d / 30d: cost · requests · tokens) + open-full-page/refresh buttons |
+| MaxPlus page (`/maxplus`) | Credit hero + burn pace · account usage 1d/7d/30d (24h refreshes every 15s) · smoke test · anomaly scan + freeze · keys table (search/pool filter/sort by spend) + pool moves · token fields · morning checklist |
+| ⌘K commands | `MaxPlus: เปิดหน้าสถานะ (Open)` · `MaxPlus: รีเฟรชเครดิต (Refresh)` · `MaxPlus: ลบ tokens (Clear)` |
 
 ## Privacy
 

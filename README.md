@@ -35,6 +35,9 @@ hermes plugins install Manchinn/hermes-maxplus-credit --ref <40-char-sha> --enab
    - scope `keys:read` + `usage:read` ก็พอสำหรับดูอย่างเดียว
    - ติ๊ก `keys:update` เพิ่มถ้าจะย้าย pool / freeze / ใส่ cap จากใน plugin
 
+chip ที่ status bar ขวาโชว์ยอดคงเหลือ (`MaxPlus $xx.xx`, poll ทุก 60 วิ) —
+กดแล้วเด้ง **popup สรุป** ทันที ไม่ต้องเข้าหน้าเต็ม
+
 ย้าย pool: กด **ย้าย pool · Move** ในการ์ด key → เลือก pool → ยืนยัน
 secret เดิมยังใช้ได้ แค่เปลี่ยน base URL ที่ client ให้ตรง
 (ปุ่ม base URL กดเพื่อ copy ได้เลย)
@@ -50,6 +53,14 @@ smoke test: กด **รัน smoke test** — ตรวจ `me → models → 
 
 > ย้ายแล้ว client ที่ใช้ key นั้นจะ 403 จนกว่า base URL จะตรง —
 > อย่าย้าย key ที่งานกำลังรัน
+
+## แต่ละส่วนทำอะไร
+
+| ส่วน | มีอะไร |
+| --- | --- |
+| chip + popup (status bar ขวา) | ยอดคงเหลือ poll 60 วิ · กดดู popup: ยอด + pool/สถานะ + burn pace + แถบ cap + usage ย่อแบบเลือกช่วงได้ (24 ชม. / 7 วัน / 30 วัน: cost · requests · tokens) + ปุ่มเปิดหน้าเต็ม/รีเฟรช |
+| หน้า MaxPlus (`/maxplus`) | hero เครดิต + burn pace · usage บัญชี 1d/7d/30d (24 ชม. รีเฟรชทุก 15 วิ) · smoke test · จับงบไหม้ + แช่แข็ง · ตาราง key (ค้นหา/กรอง pool/เรียงตามยอด) + ย้าย pool · ช่องใส่/ลบ token · เช็กลิสต์เช้า |
+| คำสั่ง ⌘K | `MaxPlus: เปิดหน้าสถานะ` · `MaxPlus: รีเฟรชเครดิต` · `MaxPlus: ลบ tokens` |
 
 ## ความเป็นส่วนตัว
 

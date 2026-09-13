@@ -19,6 +19,9 @@
 import {
   STATUSBAR_AREAS,
   PALETTE_AREA,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   ROUTES_AREA,
   SIDEBAR_NAV_AREA,
   host,
@@ -270,6 +273,129 @@ export default {
       })
     }
 
+    function ChipPopup() {
+      const token = useValue($token)
+      const me = useMeQuery()
+      const u7 = useUsageQuery('7d')
+      const [period, setPeriod] = useState('1d')
+      const PERIODS = [
+        { id: '1d', label: '24 ชม.' },
+        { id: '7d', label: '7 วัน' },
+        { id: '30d', label: '30 วัน' },
+      ]
+      const periodLabel = (PERIODS.find((p) => p.id === period) || PERIODS[0]).label + ' '
+      const refresh = () => {
+        haptic('tap')
+        queryClient.invalidateQueries({ queryKey: [ID] })
+      }
+      const openFull = () => {
+        haptic('tap')
+        host.navigate('/maxplus')
+      }
+      const footer = jsxs('div', {
+        className: 'flex gap-1.5',
+        children: [
+          jsx('button', {
+            type: 'button',
+            onClick: openFull,
+            className: 'flex-1 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
+            children: 'เปิดหน้าเต็ม →',
+          }),
+          jsx('button', {
+            type: 'button',
+            onClick: refresh,
+            className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
+            children: 'รีเฟรช',
+          }),
+        ],
+      })
+      if (!token) {
+        return jsxs('div', {
+          className: 'flex flex-col gap-1.5',
+          children: [
+            jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ใส่ ccsk-… ในหน้า MaxPlus ก่อน — มีแค่ management token ก็ดูตาราง key ได้' }),
+            footer,
+          ],
+        })
+      }
+      if (me.isLoading) {
+        return jsxs('div', {
+          className: 'flex flex-col gap-1.5',
+          children: [
+            jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'กำลังดึง /v1/me…' }),
+            footer,
+          ],
+        })
+      }
+      if (me.error) {
+        return jsxs('div', {
+          className: 'flex flex-col gap-1.5',
+          children: [
+            jsx('div', { className: 'text-sm', children: ERR_TH[errKey(me.error)] || 'ดูไม่ได้' }),
+            footer,
+          ],
+        })
+      }
+      const k = pickKey(me.data)
+      const bal = me.data && me.data.credit_usd
+      const c7 = !u7.isLoading && !u7.error ? costOf(totalsOf(u7.data)) : null
+      const perDay = c7 != null ? c7 / 7 : null
+      const days = typeof bal === 'number' && perDay > 0 ? bal / perDay : null
+      const pace = days == null
+        ? (c7 != null ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน` : 'รอ usage 7 วัน…')
+        : days < 3
+          ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${days < 1 ? 'ไม่ถึงวัน' : `${Math.floor(days)} วัน`} ⚠️`
+          : `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${Math.floor(days)} วัน`
+      return jsxs('div', {
+        style: { maxHeight: '60vh', overflowY: 'auto' },
+        className: 'flex flex-col gap-2',
+        children: [
+          jsxs('div', {
+            className: 'flex flex-col gap-0.5',
+            children: [
+              jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `คงเหลือ · pool ${k.pool} · ${k.active === false ? '❌ ปิด' : '✅ เปิด'}` }),
+              jsx('div', {
+                style: { fontSize: 26, fontWeight: 650, lineHeight: 1.15 },
+                className: 'font-mono tabular-nums',
+                children: fmtUsd(bal),
+              }),
+              jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: pace }),
+              typeof k.limit === 'number' && typeof k.used === 'number'
+                ? jsxs('div', {
+                    className: 'flex flex-col gap-0.5',
+                    children: [
+                      jsx(SpendBar, { ratio: k.used / k.limit }),
+                      jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `cap ${fmtUsd(k.limit)} · ใช้ไป ${fmtUsd(k.used)} · เหลือ ${fmtUsd(k.limit - k.used)}` }),
+                    ],
+                  })
+                : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `key นี้ใช้สะสม ${fmtUsd(k.used)} · ไม่จำกัด cap` }),
+            ],
+          }),
+          jsxs('div', {
+            className: 'flex flex-col gap-1 border-t border-(--ui-stroke-secondary) pt-1.5',
+            children: [
+              jsxs('div', {
+                className: 'flex gap-1',
+                children: PERIODS.map((p) => jsx('button', {
+                  type: 'button',
+                  onClick: () => {
+                    haptic('tap')
+                    setPeriod(p.id)
+                  },
+                  className: 'flex-1 rounded-sm border px-2 py-0.5 text-xs ' + (period === p.id
+                    ? 'border-(--ui-accent) text-foreground'
+                    : 'border-(--ui-stroke-secondary) text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)'),
+                  children: p.label,
+                }, p.id)),
+              }),
+              jsx(UsageBlock, { period, label: periodLabel }),
+            ],
+          }),
+          footer,
+        ],
+      })
+    }
+
     function Chip() {
       const token = useValue($token)
       const mgmt = useValue($mgmt)
@@ -287,15 +413,29 @@ export default {
         else if (keys.isLoading) label = 'MaxPlus …'
         else if (keys.error) label = 'MaxPlus !'
       }
-      return jsx('button', {
-        type: 'button',
-        title: 'MaxPlus — เปิดหน้าสถานะ',
-        className: 'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
-        onClick: () => {
-          haptic('tap')
-          host.navigate('/maxplus')
-        },
-        children: label,
+      return jsxs(Popover, {
+        children: [
+          jsx(PopoverTrigger, {
+            asChild: true,
+            children: jsx('button', {
+              type: 'button',
+              title: 'MaxPlus — กดดูสรุป',
+              className: 'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
+              onClick: () => {
+                haptic('tap')
+              },
+              children: label,
+            }),
+          }),
+          jsx(PopoverContent, {
+            side: 'top',
+            align: 'end',
+            sideOffset: 8,
+            collisionPadding: 12,
+            className: 'z-[1000] w-72 p-3',
+            children: jsx(ChipPopup, {}),
+          }),
+        ],
       })
     }
 
