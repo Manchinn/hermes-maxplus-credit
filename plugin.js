@@ -1,8 +1,8 @@
 /**
- * MaxPlus Credit — Hermes desktop plugin (frontend-only, v4 bilingual).
+ * MaxPlus Credit — Hermes desktop plugin (frontend-only, Thai UI).
  *
  * แสดงเครดิต + usage + key ทุก pool ของ MaxPlus (api.maxplus-ai.cc)
- * Shows MaxPlus credit, usage and per-pool keys (Thai · English UI).
+ * Shows MaxPlus credit, usage and per-pool keys (Thai UI).
  *
  * - statusBar chip: credit balance (or key count), polls every 60s
  * - page /maxplus: hero balance + burn pace, account usage 1d/7d/30d,
@@ -39,15 +39,15 @@ const KEY_RE = /^ccsk-[a-f0-9]{64}$/
 const MGMT_RE = /^ccmk-\S{8,}$/
 
 const ERR_TH = {
-  'no-token': 'ยังไม่ได้ตั้ง token · No token set',
-  network: 'ต่อ API ไม่ได้ (เน็ต/CORS) · Cannot reach API (network/CORS)',
-  'http-401': '401 token ผิด/หมดอายุ · invalid/expired token',
-  'http-402': '402 เครดิตหมด — เติมที่ /dashboard/topup แล้วรอ ~30s · out of credit, top up then wait ~30s',
-  'http-403': '403 สิทธิ์ไม่พอ หรือ key ไม่ผูก pool · missing scope or wrong pool',
-  'http-404': '404 path ผิด · bad path',
-  'http-409': '409 key ผิดประเภท (text/image) · wrong key type',
-  'http-429': '429 ชน cap/concurrent · cap or concurrency hit',
-  'http-503': '503 pool ล่ม · pool down',
+  'no-token': 'ยังไม่ได้ตั้ง token',
+  network: 'ต่อ API ไม่ได้ (เน็ต/CORS)',
+  'http-401': '401 token ผิด/หมดอายุ',
+  'http-402': '402 เครดิตหมด — เติมที่ /dashboard/topup แล้วรอ ~30s',
+  'http-403': '403 สิทธิ์ไม่พอ หรือ key ไม่ผูก pool',
+  'http-404': '404 path ผิด',
+  'http-409': '409 key ผิดประเภท (text/image)',
+  'http-429': '429 ชน cap/concurrent',
+  'http-503': '503 pool ล่ม',
   'http-504': '504 timeout',
 }
 
@@ -255,7 +255,7 @@ export default {
       const mgmt = useValue($mgmt)
       const me = useMeQuery()
       const keys = useKeysQuery()
-      let label = 'MaxPlus: no key'
+      let label = 'MaxPlus: ไม่มี key'
       if (token) {
         if (me.data) {
           const c = me.data.credit_usd
@@ -263,13 +263,13 @@ export default {
         } else if (me.isLoading) label = 'MaxPlus …'
         else if (me.error) label = 'MaxPlus !'
       } else if (mgmt) {
-        if (keys.data) label = `MaxPlus ${pickKeyList(keys.data).length} keys`
+        if (keys.data) label = `MaxPlus ${pickKeyList(keys.data).length} key`
         else if (keys.isLoading) label = 'MaxPlus …'
         else if (keys.error) label = 'MaxPlus !'
       }
       return jsx('button', {
         type: 'button',
-        title: 'MaxPlus credit — open status · เปิดหน้าสถานะ',
+        title: 'MaxPlus — เปิดหน้าสถานะ',
         className: 'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
         onClick: () => {
           haptic('tap')
@@ -285,18 +285,18 @@ export default {
       const save = () => {
         const t = draft.trim()
         if (t && !pattern.test(t)) {
-          host.notify({ kind: 'info', message: `รูปแบบไม่ถูก · Bad format — ${hint}` })
+          host.notify({ kind: 'info', message: `รูปแบบไม่ถูก — ${hint}` })
           return
         }
         setStored($a, storeKey, t)
         setDraft('')
         queryClient.invalidateQueries({ queryKey: [ID] })
-        host.notify({ kind: 'info', message: t ? `บันทึก ${label} แล้ว · saved` : `ลบ ${label} แล้ว · removed` })
+        host.notify({ kind: 'info', message: t ? `บันทึก ${label} แล้ว` : `ลบ ${label} แล้ว` })
       }
       return jsxs('div', {
         className: 'flex flex-col gap-1.5',
         children: [
-          jsx(Row, { label, value: cur ? maskToken(cur) : '— ยังไม่มี · none —' }),
+          jsx(Row, { label, value: cur ? maskToken(cur) : '— ยังไม่มี —' }),
           jsxs('div', {
             className: 'flex gap-1.5',
             children: [
@@ -316,7 +316,7 @@ export default {
                 type: 'button',
                 onClick: save,
                 className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                children: cur ? 'เปลี่ยน · Change' : 'บันทึก · Save',
+                children: cur ? 'เปลี่ยน' : 'บันทึก',
               }),
               cur
                 ? jsx('button', {
@@ -325,10 +325,10 @@ export default {
                       setStored($a, storeKey, '')
                       setDraft('')
                       queryClient.invalidateQueries({ queryKey: [ID] })
-                      host.notify({ kind: 'info', message: `ลบ ${label} แล้ว · removed` })
+                      host.notify({ kind: 'info', message: `ลบ ${label} แล้ว` })
                     },
                     className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                    children: 'ลบ · Remove',
+                    children: 'ลบ',
                   })
                 : null,
             ],
@@ -341,8 +341,8 @@ export default {
       const token = useValue($token)
       const q = useUsageQuery(period)
       if (!token) return null
-      if (q.isLoading) return jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: `${label}กำลังโหลด… · loading…` })
-      if (q.error) return jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: `${label}${ERR_TH[errKey(q.error)] || 'ดูไม่ได้ · unavailable'}` })
+      if (q.isLoading) return jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: `${label}กำลังโหลด…` })
+      if (q.error) return jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: `${label}${ERR_TH[errKey(q.error)] || 'ดูไม่ได้'}` })
       const t = totalsOf(q.data)
       const req = t.request_count ?? t.requests ?? null
       return jsxs('div', {
@@ -372,11 +372,11 @@ export default {
       const curPool = String(k.pool || 'auto')
       const copyBase = async () => {
         const ok = await ctx.os.writeClipboard(baseFor(curPool))
-        host.notify({ kind: 'info', message: ok ? `copy base URL แล้ว · copied: ${baseFor(curPool)}` : 'copy ไม่ได้ จดเอง · copy failed: ' + baseFor(curPool) })
+        host.notify({ kind: 'info', message: ok ? `copy base URL แล้ว: ${baseFor(curPool)}` : 'copy ไม่ได้ จดเอง: ' + baseFor(curPool) })
       }
       const doMove = async () => {
         if (!dest || dest === curPool) {
-          host.notify({ kind: 'info', message: 'เลือก pool ปลายทางก่อน (ต้องต่างจากเดิม) · pick a different pool' })
+          host.notify({ kind: 'info', message: 'เลือก pool ปลายทางก่อน (ต้องต่างจากเดิม)' })
           return
         }
         setBusy(true)
@@ -384,14 +384,14 @@ export default {
           await apiPatch(`/v1/api-keys/${encodeURIComponent(k.id)}`, { pool: dest })
           queryClient.invalidateQueries({ queryKey: [ID] })
           setMoveOpen(false)
-          host.notify({ kind: 'info', message: `ย้าย ${k.name || k.id} → ${dest} แล้ว · moved — เปลี่ยน base URL ที่ client เป็น ${baseFor(dest)} (secret เดิมใช้ได้ · same secret)` })
+          host.notify({ kind: 'info', message: `ย้าย ${k.name || k.id} → ${dest} แล้ว — เปลี่ยน base URL ที่ client เป็น ${baseFor(dest)} (secret เดิมใช้ได้)` })
         } catch (e) {
           const key = errKey(e)
           host.notify({
             kind: 'info',
             message: key === 'http-403'
-              ? 'token นี้ไม่มีสิทธิ์ keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม · token lacks keys:update'
-              : (ERR_TH[key] || 'ย้ายไม่สำเร็จ · move failed'),
+              ? 'token นี้ไม่มีสิทธิ์ keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม'
+              : (ERR_TH[key] || 'ย้ายไม่สำเร็จ'),
           })
         } finally {
           setBusy(false)
@@ -406,7 +406,7 @@ export default {
               jsx('span', { className: 'truncate text-sm font-medium', children: k.name || k.id }),
               jsx('span', {
                 className: 'shrink-0 font-mono text-xs text-(--ui-text-tertiary)',
-                children: `${k.active === false ? '❌ ปิด/off' : '✅ เปิด/on'} · สะสม/total ${fmtUsd(used)}`,
+                children: `${k.active === false ? '❌ ปิด' : '✅ เปิด'} · สะสม ${fmtUsd(used)}`,
               }),
             ],
           }),
@@ -420,7 +420,7 @@ export default {
               jsx('span', { className: 'shrink-0 text-(--ui-text-tertiary)', children: 'base URL' }),
               jsx('button', {
                 type: 'button',
-                title: 'กดเพื่อ copy · click to copy',
+                title: 'กดเพื่อ copy',
                 onClick: copyBase,
                 className: 'truncate font-mono text-xs tabular-nums hover:bg-(--chrome-action-hover)',
                 children: baseFor(curPool),
@@ -429,10 +429,10 @@ export default {
           }),
           jsx(Row, {
             label: 'cap',
-            value: k.limit_usd == null ? '∞ (unlimited · ไม่จำกัด)' : `${fmtUsd(k.limit_usd)}${k.limit_period ? `/${k.limit_period}` : ''}`,
+            value: k.limit_usd == null ? '∞ ไม่จำกัด' : `${fmtUsd(k.limit_usd)}${k.limit_period ? `/${k.limit_period}` : ''}`,
           }),
           noCap && k.active !== false
-            ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: '⚠️ ไม่มี daily cap — เสี่ยงเผางบ (ตั้งใน Dashboard) · no daily cap, set one in Dashboard' })
+            ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: '⚠️ ไม่มี daily cap — เสี่ยงเผางบ (ตั้งใน Dashboard)' })
             : null,
           jsxs('div', {
             className: 'flex gap-1.5',
@@ -444,7 +444,7 @@ export default {
                   $focusKey.set(open ? null : k.id)
                 },
                 className: 'mt-0.5 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                children: open ? 'ซ่อน usage · Hide' : 'ดู usage · Usage',
+                children: open ? 'ซ่อน usage' : 'ดู usage',
               }),
               jsx('button', {
                 type: 'button',
@@ -454,7 +454,7 @@ export default {
                   setMoveOpen(!moveOpen)
                 },
                 className: 'mt-0.5 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                children: moveOpen ? 'ยกเลิกย้าย · Cancel' : 'ย้าย pool · Move',
+                children: moveOpen ? 'ยกเลิกย้าย' : 'ย้าย pool',
               }),
             ],
           }),
@@ -462,7 +462,7 @@ export default {
             ? jsxs('div', {
                 className: 'flex flex-col gap-1 rounded-sm border border-(--ui-stroke-secondary) p-1.5',
                 children: [
-                  jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'ย้ายแล้ว client จะ 403 จนกว่า base URL จะตรง — secret เดิมใช้ได้ · clients 403 until base URL matches — same secret' }),
+                  jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'ย้ายแล้ว client จะ 403 จนกว่า base URL จะตรง — secret เดิมใช้ได้' }),
                   jsxs('div', {
                     className: 'flex gap-1.5',
                     children: [
@@ -477,7 +477,7 @@ export default {
                         disabled: busy,
                         onClick: doMove,
                         className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                        children: busy ? 'กำลังย้าย… · moving…' : 'ยืนยัน · Confirm',
+                        children: busy ? 'กำลังย้าย…' : 'ยืนยัน',
                       }),
                     ],
                   }),
@@ -486,16 +486,16 @@ export default {
             : null,
           open
             ? (u.isLoading
-                ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'กำลังดึง… · loading…' })
+                ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'กำลังดึง…' })
                 : u.error
-                  ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: ERR_TH[errKey(u.error)] || 'ดูไม่ได้ · unavailable' })
+                  ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: ERR_TH[errKey(u.error)] || 'ดูไม่ได้' })
                   : (() => {
                       const d = u.data || {}
                       const v = costOf(totalsOf(d)) ?? (typeof d.cost_usd === 'number' ? d.cost_usd : null)
-                      if (v != null) return jsx(Row, { label: 'usage/key', value: fmtUsd(v) })
+                      if (v != null) return jsx(Row, { label: 'ยอดใช้ key', value: fmtUsd(v) })
                       const acc = (d.key && d.key.used_usd) ?? (typeof k.used_usd === 'number' ? k.used_usd : null)
-                      if (typeof acc === 'number') return jsx(Row, { label: 'ใช้สะสม/key · lifetime/key', value: fmtUsd(acc) })
-                      return jsx(Row, { label: 'usage/key', value: 'ดูใน Dashboard · check Dashboard' })
+                      if (typeof acc === 'number') return jsx(Row, { label: 'ใช้สะสม/key', value: fmtUsd(acc) })
+                      return jsx(Row, { label: 'ยอดใช้ key', value: 'ดูใน Dashboard' })
                     })())
             : null,
         ],
@@ -532,7 +532,7 @@ export default {
           }
         }
         let me = null
-        await timed('1/3 · /v1/me — เครดิต + pool', async () => {
+        await timed('1/3 · /v1/me', async () => {
           me = await apiWith(token, '/v1/me')
           const k = pickKey(me)
           return `pool ${k.pool} · ${fmtUsd(me.credit_usd)}`
@@ -544,54 +544,54 @@ export default {
         }
         let ids = []
         const models = me
-          ? await timed(`2/3 · models — catalog ของ pool ${pool}`, async () => {
+          ? await timed(`2/3 · models ของ pool ${pool}`, async () => {
               const md = await apiUrl(token, `${baseFor(pool)}/models`)
               const raw = md.data || md.models || []
               ids = (Array.isArray(raw) ? raw : [])
                 .map((x) => (typeof x === 'string' ? x : x && x.id))
                 .filter((x) => typeof x === 'string')
-              return `${ids.length} models`
+              return `${ids.length} โมเดล`
             })
           : null
         if (models) {
           const chatModel = ids.find((id) => !/image|embed|tts|whisper/i.test(id)) || ids[0] || null
           if (!chatModel) {
-            push({ name: '3/3 · chat — ไม่มี chat model ใน catalog', ok: false, ms: 0, extra: null, err: 'catalog ว่าง/มีแต่ image · empty catalog' })
+            push({ name: '3/3 · chat — ไม่มี chat model ใน catalog', ok: false, ms: 0, extra: null, err: 'catalog ว่าง/มีแต่ image' })
           } else {
-            await timed(`3/3 · chat — ${chatModel} (16 tokens)`, async () => {
+            await timed(`3/3 · chat ${chatModel} (16 tokens)`, async () => {
               const r = await apiUrl(token, `${baseFor(pool)}/chat/completions`, {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ model: chatModel, max_tokens: 16, stream: false, messages: [{ role: 'user', content: 'Reply exactly: pong' }] }),
               })
               const c = r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content
-              if (!c) throw new Error('ตอบกลับไม่มี content · empty reply')
+              if (!c) throw new Error('ตอบกลับไม่มี content')
               return `\u201C${String(c).slice(0, 40)}\u201D`
             })
           }
         }
         const fails = out.filter((s) => !s.ok).length
-        host.notify({ kind: 'info', message: fails ? `smoke จบ: ❌ ${fails}/${out.length} ขั้น — ดูรายขั้น · failed` : `smoke ผ่าน ${out.length}/${out.length} ✅ · all pass` })
+        host.notify({ kind: 'info', message: fails ? `smoke จบ: ❌ ${fails}/${out.length} ขั้น` : `smoke ผ่าน ${out.length}/${out.length} ✅` })
         } finally {
           setRunning(false)
         }
       }
       return jsx(Section, {
-        title: 'smoke test · ตรวจสายส่ง (runbook §5.4)',
+        title: 'ตรวจสายส่ง (§5.4)',
         right: jsx('button', {
           type: 'button',
           disabled: running,
           onClick: run,
           className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-          children: running ? 'กำลังรัน… · running…' : 'รัน smoke · Run',
+          children: running ? 'กำลังรัน…' : 'รัน smoke test',
         }),
         children: !steps
-          ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'กดรัน: me → models ของ pool key นี้ → chat non-stream 16 tokens · run: me → pool models → tiny non-stream chat' })
+          ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'กดรัน: me → models ของ pool key นี้ → chat non-stream 16 tokens' })
           : jsxs('div', {
               className: 'flex flex-col gap-0.5',
               children: steps.map((s, i) => jsx(Row, {
                 label: `${s.ok ? '✅' : '❌'} ${s.name}`,
-                value: s.ok ? `${s.ms}ms${s.extra ? ` · ${s.extra}` : ''}` : (s.err || 'fail'),
+                value: s.ok ? `${s.ms}ms${s.extra ? ` · ${s.extra}` : ''}` : (s.err || 'ไม่ผ่าน'),
               }, i)),
             }),
       })
@@ -622,11 +622,11 @@ export default {
       const scan = async () => {
         const limit = parseFloat(th)
         if (!(limit > 0)) {
-          host.notify({ kind: 'info', message: 'ใส่ threshold เป็นตัวเลข $/รอบ ก่อน · enter a numeric $ threshold' })
+          host.notify({ kind: 'info', message: 'ใส่ threshold เป็นตัวเลข $/รอบ ก่อน' })
           return
         }
         if (!list.length) {
-          host.notify({ kind: 'info', message: 'ยังไม่มีรายการ key — รอโหลดตาราง key ก่อน · no keys yet' })
+          host.notify({ kind: 'info', message: 'ยังไม่มีรายการ key — รอโหลดตาราง key ก่อน' })
           return
         }
         haptic('tap')
@@ -660,8 +660,8 @@ export default {
         host.notify({
           kind: 'info',
           message: !base
-            ? `ตั้ง baseline แล้ว (${out.length} keys) — สแกนอีกครั้งเพื่อเทียบส่วนต่าง · baseline saved`
-            : (overs ? `⚠️ ${overs} key ใช้เกิน $${limit} จาก baseline · over threshold` : `✅ ทุก key ต่ำกว่า $${limit} จาก baseline · all under`),
+            ? `ตั้ง baseline แล้ว (${out.length} keys) — สแกนอีกครั้งเพื่อเทียบส่วนต่าง`
+            : (overs ? `⚠️ ${overs} key ใช้เกิน $${limit} จาก baseline` : `✅ ทุก key ต่ำกว่า $${limit} จาก baseline`),
         })
       }
       const doFreeze = async (row) => {
@@ -670,22 +670,22 @@ export default {
           await apiPatch(`/v1/api-keys/${encodeURIComponent(row.id)}`, { limit_usd: 0 })
           setRows((prev) => (prev || []).map((r) => (r.id === row.id ? { ...r, frozen: true } : r)))
           queryClient.invalidateQueries({ queryKey: [ID] })
-          host.notify({ kind: 'info', message: `freeze ${row.name} แล้ว (cap 0) — ปลดเองใน Dashboard · frozen, restore in Dashboard` })
+          host.notify({ kind: 'info', message: `แช่แข็ง ${row.name} แล้ว (cap 0) — ปลดเองใน Dashboard` })
         } catch (e) {
-          host.notify({ kind: 'info', message: errKey(e) === 'http-403' ? 'ต้อง scope keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม · needs keys:update' : (ERR_TH[errKey(e)] || 'freeze ไม่สำเร็จ · failed') })
+          host.notify({ kind: 'info', message: errKey(e) === 'http-403' ? 'ต้อง scope keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม' : (ERR_TH[errKey(e)] || 'แช่แข็งไม่สำเร็จ') })
         } finally {
           setBusy(false)
           setConfirmId(null)
         }
       }
       return jsx(Section, {
-        title: `จับงบไหม้ · Anomaly scan (UC-3)${baseTs ? ` · baseline ${baseTs}` : ''}`,
+        title: `จับงบไหม้ (UC-3)${baseTs ? ` · baseline ${baseTs}` : ''}`,
         right: jsx('button', {
           type: 'button',
           disabled: scanning,
           onClick: scan,
           className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-          children: scanning ? 'กำลังสแกน… · scanning…' : 'สแกน · Scan',
+          children: scanning ? 'กำลังสแกน…' : 'สแกน',
         }),
         children: jsxs('div', {
           className: 'flex flex-col gap-1',
@@ -693,7 +693,7 @@ export default {
             jsxs('div', {
               className: 'flex items-center gap-1.5',
               children: [
-                jsx('span', { className: 'shrink-0 text-xs text-(--ui-text-tertiary)', children: 'เกิน $/รอบ · over $/scan' }),
+                jsx('span', { className: 'shrink-0 text-xs text-(--ui-text-tertiary)', children: 'เกิน $/รอบ' }),
                 jsx('input', {
                   value: th,
                   spellCheck: false,
@@ -702,7 +702,7 @@ export default {
                   onChange: (e) => setTh(e.target.value),
                   className: 'w-20 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 font-mono text-xs',
                 }),
-                jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: 'สแกนแรก = ตั้ง baseline · first scan sets baseline' }),
+                jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: 'สแกนแรก = ตั้ง baseline' }),
               ],
             }),
             prog ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: prog }) : null,
@@ -713,8 +713,8 @@ export default {
                     className: 'flex flex-col gap-0.5 rounded-sm border border-(--ui-stroke-secondary) p-1',
                     children: [
                       jsx(Row, {
-                        label: `${r.over ? '⚠️' : '✅'} ${r.name}${r.frozen ? ' · 🧊 frozen' : ''}`,
-                        value: r.err ? r.err : (r.delta != null ? `+${fmtUsd(r.delta)}${r.over ? ' เกิน · OVER' : ''}` : (r.cost != null ? `ยอด ${fmtUsd(r.cost)} · baseline ใหม่` : 'วัดไม่ได้ · n/a')),
+                        label: `${r.over ? '⚠️' : '✅'} ${r.name}${r.frozen ? ' · 🧊 แช่แข็งแล้ว' : ''}`,
+                        value: r.err ? r.err : (r.delta != null ? `+${fmtUsd(r.delta)}${r.over ? ' เกิน' : ''}` : (r.cost != null ? `ยอด ${fmtUsd(r.cost)} (baseline ใหม่)` : 'วัดไม่ได้')),
                       }),
                       r.over && !r.frozen
                         ? (confirmId === r.id
@@ -726,13 +726,13 @@ export default {
                                     disabled: busy,
                                     onClick: () => doFreeze(r),
                                     className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                                    children: busy ? 'กำลัง freeze…' : 'ยืนยัน freeze (cap → 0) · Confirm',
+                                    children: busy ? 'กำลังแช่แข็ง…' : 'ยืนยันแช่แข็ง (cap → 0)',
                                   }),
                                   jsx('button', {
                                     type: 'button',
                                     onClick: () => setConfirmId(null),
                                     className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                                    children: 'ยกเลิก · Cancel',
+                                    children: 'ยกเลิก',
                                   }),
                                 ],
                               })
@@ -743,7 +743,7 @@ export default {
                                   setConfirmId(r.id)
                                 },
                                 className: 'self-start rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                                children: 'Freeze key นี้ · Freeze',
+                                children: 'แช่แข็ง key นี้',
                               }))
                         : null,
                     ],
@@ -766,19 +766,19 @@ export default {
       const [enforcing, setEnforcing] = useState(false)
       if (!mgmt) {
         return jsx(Section, {
-          title: 'key ทุก pool · Keys by pool',
-          children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ใส่ ccmk-… (scope keys:read + usage:read ก็พอ) · add ccmk-… (keys:read + usage:read is enough)' }),
+          title: 'key ทุก pool',
+          children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ใส่ ccmk-… (scope keys:read + usage:read ก็พอ)' }),
         })
       }
       if (q.isLoading) {
-        return jsx(Section, { title: 'key ทุก pool · Keys by pool', children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'กำลังดึง /v1/api-keys… · loading…' }) })
+        return jsx(Section, { title: 'key ทุก pool', children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'กำลังดึง /v1/api-keys…' }) })
       }
       if (q.error) {
-        return jsx(Section, { title: 'key ทุก pool · Keys by pool', children: jsx('div', { className: 'text-sm', children: ERR_TH[errKey(q.error)] || 'ดูไม่ได้ · unavailable' }) })
+        return jsx(Section, { title: 'key ทุก pool', children: jsx('div', { className: 'text-sm', children: ERR_TH[errKey(q.error)] || 'ดูไม่ได้' }) })
       }
       const list = pickKeyList(q.data)
       if (!list.length) {
-        return jsx(Section, { title: 'key ทุก pool · Keys by pool', children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ไม่มี key ในบัญชี · no keys' }) })
+        return jsx(Section, { title: 'key ทุก pool', children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ไม่มี key ในบัญชี' }) })
       }
       const pools = [...new Set(list.map((k) => String(k.pool || 'auto')))].sort()
       const needle = text.trim().toLowerCase()
@@ -792,7 +792,7 @@ export default {
       const doEnforce = async () => {
         const cap = parseFloat(capDraft)
         if (!(cap > 0)) {
-          host.notify({ kind: 'info', message: 'ใส่ cap เป็นตัวเลข $/วัน ก่อน · enter a numeric $/day cap' })
+          host.notify({ kind: 'info', message: 'ใส่ cap เป็นตัวเลข $/วัน ก่อน' })
           return
         }
         haptic('tap')
@@ -815,10 +815,10 @@ export default {
         host.notify({
           kind: 'info',
           message: fail403
-            ? `ต้อง scope keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม (ใส่ได้ ${ok}/${targets.length}) · needs keys:update`
+            ? `ต้อง scope keys:update — สร้าง mgmt token ใหม่แล้วติ๊กเพิ่ม (ใส่ได้ ${ok}/${targets.length})`
             : (ok === targets.length
-                ? `ใส่ daily cap $${cap} แล้ว ${ok}/${targets.length} keys · enforced`
-                : `ใส่ได้ ${ok}/${targets.length} — ติด: ${failOther || 'ดู error ราย key'} · partial`),
+                ? `ใส่ daily cap $${cap} แล้ว ${ok}/${targets.length} keys`
+                : `ใส่ได้ ${ok}/${targets.length} — ติด: ${failOther || 'ดู error ราย key'}`),
         })
       }
       const chipBtn = (id, label, active) => jsx('button', {
@@ -832,7 +832,7 @@ export default {
         children: label,
       })
       return jsx(Section, {
-        title: `key ทุก pool · ${list.length} keys${risky ? ` · ⚠️ ${risky} ไม่มี daily cap · no daily cap` : ''}`,
+        title: `key ทุก pool · ${list.length}${risky ? ` · ⚠️ ${risky} ไม่มี daily cap` : ''}`,
         children: jsxs('div', {
           className: 'flex flex-col gap-1.5',
           children: [
@@ -840,7 +840,7 @@ export default {
               ? jsxs('div', {
                   className: 'flex flex-col gap-1 rounded-sm border border-(--ui-stroke-secondary) p-1.5',
                   children: [
-                    jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `⚠️ ${risky} key ไม่มี daily cap — ใส่ให้ทั้งหมดทีเดียว (ต้อง keys:update) · enforce a daily cap on all` }),
+                    jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `⚠️ ${risky} key ไม่มี daily cap — ใส่ให้ทั้งหมดทีเดียว (ต้อง keys:update)` }),
                     confirmCap
                       ? jsxs('div', {
                           className: 'flex gap-1.5',
@@ -850,13 +850,13 @@ export default {
                               disabled: enforcing,
                               onClick: doEnforce,
                               className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                              children: enforcing ? 'กำลังใส่… · enforcing…' : `ยืนยัน $${capDraft || '?'}/วัน ให้ ${targets.length} keys · Confirm`,
+                              children: enforcing ? 'กำลังใส่…' : `ยืนยัน $${capDraft || '?'}/วัน ให้ ${targets.length} keys`,
                             }),
                             jsx('button', {
                               type: 'button',
                               onClick: () => setConfirmCap(false),
                               className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                              children: 'ยกเลิก · Cancel',
+                              children: 'ยกเลิก',
                             }),
                           ],
                         })
@@ -867,7 +867,7 @@ export default {
                               value: capDraft,
                               spellCheck: false,
                               inputMode: 'decimal',
-                              placeholder: '$/วัน · $/day (เช่น 10)',
+                              placeholder: '$/วัน (เช่น 10)',
                               onChange: (e) => setCapDraft(e.target.value),
                               className: 'w-36 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 font-mono text-xs',
                             }),
@@ -878,7 +878,7 @@ export default {
                                 setConfirmCap(true)
                               },
                               className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                              children: 'ใส่ cap · Enforce',
+                              children: 'ใส่ cap',
                             }),
                           ],
                         }),
@@ -888,23 +888,23 @@ export default {
             jsx('input', {
               value: text,
               spellCheck: false,
-              placeholder: 'ค้นชื่อ key… · search keys…',
+              placeholder: 'ค้นชื่อ key…',
               onChange: (e) => setText(e.target.value),
               className: 'min-w-0 flex-1 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 text-xs',
             }),
             jsxs('div', {
               className: 'flex gap-1 overflow-y-auto',
-              children: [chipBtn('all', `ทั้งหมด · All (${list.length})`, poolFilter === 'all'), ...pools.map((p) => chipBtn(p, p, poolFilter === p))],
+              children: [chipBtn('all', `ทั้งหมด (${list.length})`, poolFilter === 'all'), ...pools.map((p) => chipBtn(p, p, poolFilter === p))],
             }),
             shown.length
               ? jsxs('div', {
                   className: 'flex flex-col gap-1.5',
                   children: [
-                    jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `โชว์ ${shown.length}/${list.length} · เรียงตามยอดใช้ · sorted by spend (bar = vs top)` }),
+                    jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `โชว์ ${shown.length}/${list.length} · เรียงตามยอดใช้ (bar = เทียบตัวท็อป)` }),
                     ...shown.map((k) => jsx(KeyCard, { k, maxUsed }, k.id)),
                   ],
                 })
-              : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'ไม่เจอ key ตรงเงื่อนไข · no matches' }),
+              : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'ไม่เจอ key ตรงเงื่อนไข' }),
           ],
         }),
       })
@@ -916,15 +916,15 @@ export default {
       const u7 = useUsageQuery('7d')
       if (!token) {
         return jsx(Section, {
-          title: 'เครดิต · Credit',
-          children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ใส่ ccsk-… ด้านล่างก่อน — มีแค่ management token ก็ดูตาราง key ได้ · add ccsk-… below, or use management token for the table' }),
+          title: 'เครดิต',
+          children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ใส่ ccsk-… ด้านล่างก่อน — มีแค่ management token ก็ดูตาราง key ได้' }),
         })
       }
       if (me.isLoading) {
-        return jsx(Section, { title: 'เครดิต · Credit', children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'กำลังดึง /v1/me… · loading…' }) })
+        return jsx(Section, { title: 'เครดิต', children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'กำลังดึง /v1/me…' }) })
       }
       if (me.error) {
-        return jsx(Section, { title: 'เครดิต · Credit', children: jsx('div', { className: 'text-sm', children: ERR_TH[errKey(me.error)] || 'ดูไม่ได้ · unavailable' }) })
+        return jsx(Section, { title: 'เครดิต', children: jsx('div', { className: 'text-sm', children: ERR_TH[errKey(me.error)] || 'ดูไม่ได้' }) })
       }
       const k = pickKey(me.data)
       const bal = me.data && me.data.credit_usd
@@ -932,14 +932,14 @@ export default {
       const perDay = c7 != null ? c7 / 7 : null
       const days = typeof bal === 'number' && perDay > 0 ? bal / perDay : null
       const pace = days == null
-        ? (c7 != null ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน · burns ${fmtUsd(perDay)}/day` : 'รอ usage 7 วัน… · waiting for 7d usage…')
+        ? (c7 != null ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน` : 'รอ usage 7 วัน…')
         : days < 3
-          ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${days < 1 ? 'ไม่ถึงวัน' : `${Math.floor(days)} วัน`} ⚠️ · ~${days < 1 ? '<1' : Math.floor(days)} days left`
-          : `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${Math.floor(days)} วัน · ~${Math.floor(days)} days left`
+          ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${days < 1 ? 'ไม่ถึงวัน' : `${Math.floor(days)} วัน`} ⚠️`
+          : `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${Math.floor(days)} วัน`
       return jsxs('div', {
         className: 'flex flex-col gap-0.5 rounded-md border border-(--ui-stroke-secondary) p-3',
         children: [
-          jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `คงเหลือ · Balance · pool ${k.pool} · ${k.active === false ? '❌ off·ปิด' : '✅ on·เปิด'}` }),
+          jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `คงเหลือ · pool ${k.pool} · ${k.active === false ? '❌ ปิด' : '✅ เปิด'}` }),
           jsx('div', {
             style: { fontSize: 30, fontWeight: 650, lineHeight: 1.15 },
             className: 'font-mono tabular-nums',
@@ -951,10 +951,10 @@ export default {
                 className: 'flex flex-col gap-0.5',
                 children: [
                   jsx(SpendBar, { ratio: k.used / k.limit }),
-                  jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `cap ${fmtUsd(k.limit)} · ใช้ไป/used ${fmtUsd(k.used)} · เหลือ/left ${fmtUsd(k.limit - k.used)}` }),
+                  jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `cap ${fmtUsd(k.limit)} · ใช้ไป ${fmtUsd(k.used)} · เหลือ ${fmtUsd(k.limit - k.used)}` }),
                 ],
               })
-            : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `key นี้ใช้สะสม/this key lifetime ${fmtUsd(k.used)} · ไม่จำกัด cap · uncapped` }),
+            : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `key นี้ใช้สะสม ${fmtUsd(k.used)} · ไม่จำกัด cap` }),
         ],
       })
     }
@@ -962,7 +962,7 @@ export default {
     function StatusPage() {
       const refresh = () => {
         queryClient.invalidateQueries({ queryKey: [ID] })
-        host.notify({ kind: 'info', message: 'รีเฟรช MaxPlus แล้ว · refreshed' })
+        host.notify({ kind: 'info', message: 'รีเฟรช MaxPlus แล้ว' })
       }
       return jsxs('div', {
         className: 'flex h-full flex-col gap-2 overflow-y-auto p-3 text-sm',
@@ -975,19 +975,19 @@ export default {
                 type: 'button',
                 onClick: refresh,
                 className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                children: 'รีเฟรช · Refresh',
+                children: 'รีเฟรช',
               }),
             ],
           }),
           jsx(HeroSection, {}),
           jsx(Section, {
-            title: 'usage บัญชี · Account usage',
+            title: 'usage บัญชี',
             children: jsxs('div', {
               className: 'flex flex-col',
               children: [
-                jsx(UsageBlock, { period: '1d', label: '24 ชม. · 24h ' }),
-                jsx(UsageBlock, { period: '7d', label: '7 วัน · 7d ' }),
-                jsx(UsageBlock, { period: '30d', label: '30 วัน · 30d ' }),
+                jsx(UsageBlock, { period: '1d', label: '24 ชม. ' }),
+                jsx(UsageBlock, { period: '7d', label: '7 วัน ' }),
+                jsx(UsageBlock, { period: '30d', label: '30 วัน ' }),
               ],
             }),
           }),
@@ -1005,7 +1005,7 @@ export default {
                   label: 'inference (ccsk)',
                   placeholder: 'ccsk-…',
                   pattern: KEY_RE,
-                  hint: 'ต้อง ccsk- ตามด้วย hex 64 ตัว · ccsk- + 64 hex chars',
+                  hint: 'ต้อง ccsk- ตามด้วย hex 64 ตัว',
                 }),
                 jsx(TokenField, {
                   $a: $mgmt,
@@ -1013,16 +1013,16 @@ export default {
                   label: 'management (ccmk)',
                   placeholder: 'ccmk-…',
                   pattern: MGMT_RE,
-                  hint: 'ต้องขึ้นต้น ccmk- · ดูอย่างเดียว read-only ก็พอ, freeze/ใส่ cap/ย้าย pool ต้อง keys:update',
+                  hint: 'ต้องขึ้นต้น ccmk- · ดูอย่างเดียวก็พอ, แช่แข็ง/ใส่ cap/ย้าย pool ต้อง keys:update',
                 }),
               ],
             }),
           }),
           jsx(Section, {
-            title: 'เช้าละ 2 นาที · 2-min morning check',
+            title: 'เช้าละ 2 นาที',
             children: jsx('div', {
               className: 'text-xs leading-relaxed text-(--ui-text-tertiary)',
-              children: 'credit พอไหม → key เปิด + pool ตรงเครื่องมือ → cap ไม่ชน → ไม่มี stream ค้าง (20 shared) · enough credit → keys on + pools match tools → caps unhit → no stuck streams',
+              children: 'credit พอไหม → key เปิด + pool ตรงเครื่องมือ → cap ไม่ชน → ไม่มี stream ค้าง (20 shared)',
             }),
           }),
         ],
@@ -1055,7 +1055,7 @@ export default {
         area: PALETTE_AREA,
         data: {
           id: 'maxplus.open',
-          label: 'MaxPlus: เปิดหน้าสถานะ · Open status',
+          label: 'MaxPlus: เปิดหน้าสถานะ',
           keywords: ['maxplus', 'credit', 'เครดิต', 'คีย์', 'status'],
           run: () => host.navigate('/maxplus'),
         },
@@ -1065,11 +1065,11 @@ export default {
         area: PALETTE_AREA,
         data: {
           id: 'maxplus.refresh',
-          label: 'MaxPlus: รีเฟรชเครดิต · Refresh credit',
+          label: 'MaxPlus: รีเฟรชเครดิต',
           keywords: ['maxplus', 'refresh', 'รีเฟรช'],
           run: () => {
             queryClient.invalidateQueries({ queryKey: [ID] })
-            host.notify({ kind: 'info', message: 'รีเฟรช MaxPlus แล้ว · refreshed' })
+            host.notify({ kind: 'info', message: 'รีเฟรช MaxPlus แล้ว' })
           },
         },
       },
@@ -1078,13 +1078,13 @@ export default {
         area: PALETTE_AREA,
         data: {
           id: 'maxplus.clear',
-          label: 'MaxPlus: ลบ tokens · Clear tokens',
+          label: 'MaxPlus: ลบ tokens',
           keywords: ['maxplus', 'token', 'clear', 'ลบ'],
           run: () => {
             setStored($token, 'token', '')
             setStored($mgmt, 'mgmt', '')
             queryClient.invalidateQueries({ queryKey: [ID] })
-            host.notify({ kind: 'info', message: 'ลบ MaxPlus tokens แล้ว · cleared' })
+            host.notify({ kind: 'info', message: 'ลบ MaxPlus tokens แล้ว' })
           },
         },
       },

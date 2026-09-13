@@ -3,7 +3,7 @@
 🌏 README in [English](README.en.md)
 
 ดูเครดิต + usage + key ทุก pool ของ [MaxPlus](https://maxplus-ai.cc/invite/ZSPXWCJB) ใน
-Hermes Desktop หน้า UI สองภาษา (ไทย·English)
+Hermes Desktop หน้า UI ภาษาไทย
 
 ![status page](docs/status.png)
 
@@ -39,13 +39,13 @@ hermes plugins install Manchinn/hermes-maxplus-credit --ref <40-char-sha> --enab
 secret เดิมยังใช้ได้ แค่เปลี่ยน base URL ที่ client ให้ตรง
 (ปุ่ม base URL กดเพื่อ copy ได้เลย)
 
-smoke test: กด **รัน smoke · Run** — ตรวจ `me → models → chat` 16 tokens ทีเดียว
+smoke test: กด **รัน smoke test** — ตรวจ `me → models → chat` 16 tokens ทีเดียว
 (ใช้ pool ของ key นี้, ไม่ต้องก๊อป cURL)
 
-จับงบไหม้: ตั้ง threshold → กด **สแกน · Scan** (ครั้งแรก = ตั้ง baseline,
-ครั้งถัดไปเทียบส่วนต่าง) → key ไหนเกินมีปุ่ม **Freeze** (cap → 0, ปลดใน Dashboard)
+จับงบไหม้: ตั้ง threshold → กด **สแกน** (ครั้งแรก = ตั้ง baseline,
+ครั้งถัดไปเทียบส่วนต่าง) → key ไหนเกินมีปุ่ม **แช่แข็ง** (cap → 0, ปลดใน Dashboard)
 
-ใส่ cap: ถ้ามี key ไม่มี daily cap จะมีแถบ **ใส่ cap · Enforce** —
+ใส่ cap: ถ้ามี key ไม่มี daily cap จะมีแถบ **ใส่ cap** —
 ใส่ daily cap ให้ทุก key ที่ขาดทีเดียว (ยืนยันก่อนเสมอ)
 
 > ย้ายแล้ว client ที่ใช้ key นั้นจะ 403 จนกว่า base URL จะตรง —
