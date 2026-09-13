@@ -7,6 +7,8 @@ Hermes Desktop หน้า UI สองภาษา (ไทย·English)
 
 ![status page](docs/status.png)
 
+📖 [ติดตั้งทีละขั้น](docs/INSTALL.th.md) · [Step-by-step install](docs/INSTALL.en.md)
+
 ## ติดตั้ง
 
 **Install from Git** (Settings → Capabilities → Plugins) แล้วใส่ repo นี้

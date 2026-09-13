@@ -7,6 +7,8 @@ inside Hermes Desktop. Bilingual UI (Thai · English).
 
 ![status page](docs/status.png)
 
+📖 [Step-by-step install](docs/INSTALL.en.md) · [ติดตั้งทีละขั้น](docs/INSTALL.th.md)
+
 ## Install
 
 **Install from Git** (Settings → Capabilities → Plugins) with this repo,
