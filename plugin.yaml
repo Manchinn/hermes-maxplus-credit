@@ -1,0 +1,11 @@
+name: maxplus-credit
+version: "1.0.0"
+description: "MaxPlus credit balance, usage statistics & API keys dashboard for Hermes Desktop"
+author: Manchinn
+homepage: https://github.com/Manchinn/hermes-maxplus-credit
+license: MIT
+capabilities:
+  provides_tools: []
+  provides_hooks: []
+  provides_middleware: []
+  requires_env: []

@@ -1,8 +1,7 @@
 /**
- * MaxPlus Credit — Hermes desktop plugin (frontend-only, Thai UI).
+ * MaxPlus Credit — Hermes desktop plugin (read-only, i18n EN/TH).
  *
- * แสดงเครดิต + usage + key ทุก pool ของ MaxPlus (api.maxplus-ai.cc)
- * Shows MaxPlus credit, usage and per-pool keys (Thai UI).
+ * Shows MaxPlus credit balance, usage statistics and API keys per pool (api.maxplus-ai.cc).
  *
  * - statusBar chip: credit balance (or key count), polls every 60s
  * - page /maxplus: hero balance + burn pace, account usage 1d/7d/30d,
@@ -10,8 +9,8 @@
  *   token slots (ccsk + ccmk) — read-only
  * - palette: open status / refresh / clear tokens
  *
- * Tokens live in the app's ctx.storage only — never in this repo.
- * Read-only plugin: keys:read + usage:read are enough — no write actions.
+ * Tokens live in ctx.storage only.
+ * Spec-compliant ctx.i18n.register({ en, th }) + internal language toggle (auto/en/th).
  */
 
 import {
@@ -28,28 +27,257 @@ import {
   queryClient,
   atom,
   useValue,
+  usePluginI18n,
 } from '@hermes/plugin-sdk'
 import { useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ID = 'maxplus-credit'
 const API = 'https://api.maxplus-ai.cc'
-// Split on purpose: the literal scheme+secret pattern trips transport redaction.
 const AUTH = 'Bear' + 'er'
 const KEY_RE = /^ccsk-[a-f0-9]{64}$/
 const MGMT_RE = /^ccmk-\S{8,}$/
 
-const ERR_TH = {
-  'no-token': 'ยังไม่ได้ตั้ง token',
-  network: 'ต่อ API ไม่ได้ (เน็ต/CORS)',
-  'http-401': '401 token ผิด/หมดอายุ',
-  'http-402': '402 เครดิตหมด — เติมที่ /dashboard/topup แล้วรอ ~30s',
-  'http-403': '403 สิทธิ์ไม่พอ หรือ key ไม่ผูก pool',
-  'http-404': '404 path ผิด',
-  'http-409': '409 key ผิดประเภท (text/image)',
-  'http-429': '429 ชน cap/concurrent',
-  'http-503': '503 pool ล่ม',
-  'http-504': '504 timeout',
+/* ─── i18n message bundles ──────────────────────────────── */
+
+const MESSAGES_EN = {
+  chip: {
+    noKey: 'MaxPlus: no key',
+    loading: 'MaxPlus …',
+    error: 'MaxPlus !',
+    tooltip: 'MaxPlus — Click for summary',
+    keysCount: (n) => `MaxPlus ${n} keys`,
+  },
+  popup: {
+    header: (pool, active) => `Balance · pool ${pool} · ${active ? '✅ Active' : '❌ Inactive'}`,
+    needToken: 'Enter ccsk-… in MaxPlus page first — management token alone is enough for key table',
+    loading: 'Fetching /v1/me…',
+  },
+  common: {
+    openFull: 'Open full page →',
+    refresh: 'Refresh',
+    refreshed: 'Refreshed MaxPlus',
+    save: 'Save',
+    change: 'Change',
+    delete: 'Delete',
+    loading: 'Loading…',
+    unavailable: 'Unavailable',
+    all: 'All',
+    none: '— none —',
+    copied: 'Copied to clipboard',
+    copyFailed: 'Could not copy',
+    lang: 'Language',
+    langAuto: 'Auto',
+    langEn: 'EN',
+    langTh: 'TH',
+    period1d: '24h',
+    period7d: '7 days',
+    period30d: '30 days',
+  },
+  hero: {
+    title: 'Credit Balance',
+    needToken: 'Enter ccsk-… below first — management token alone is enough for key table',
+    loading: 'Fetching /v1/me…',
+    header: (pool, active) => `Balance · pool ${pool} · ${active ? '✅ Active' : '❌ Inactive'}`,
+    paceWaiting: 'Waiting for 7-day usage…',
+    paceAverage: (perDay) => `Avg burn ${perDay}/day`,
+    paceWarn: (perDay, days) => `Avg burn ${perDay}/day → ~${days} left ⚠️`,
+    paceNormal: (perDay, days) => `Avg burn ${perDay}/day → ~${days} left`,
+    lessThanDay: 'less than a day',
+    daysCount: (days) => `${days} days`,
+  },
+  usage: {
+    title: 'Account Usage',
+    subtitle: '24h · Auto-refreshes every 15s',
+    requests: 'requests',
+    tokens: 'tokens',
+    cost: 'cost',
+  },
+  keys: {
+    title: 'All Pool Keys',
+    titleWithCount: (n) => `All Pool Keys · ${n}`,
+    needToken: 'Enter ccmk-… (scope keys:read + usage:read is sufficient)',
+    loading: 'Fetching /v1/api-keys…',
+    empty: 'No keys found in account',
+    searchPlaceholder: 'Search key name…',
+    allPools: (n) => `All (${n})`,
+    shownSummary: (shown, total) => `Showing ${shown}/${total} · Sorted by spend (bar compares to top key)`,
+    noMatch: 'No keys match the criteria',
+  },
+  card: {
+    active: '✅ Active',
+    inactive: '❌ Inactive',
+    accumulated: (spent) => `key total spent ${spent} · no cap`,
+    capInfo: (cap, used, left) => `cap ${cap} · used ${used} · left ${left}`,
+    freeTail: (time) => ` · resets ${time}`,
+    freeEligible: (left, tail) => `Free credit ${left} · available for this pool${tail}`,
+    freeIneligible: (amount, pools, tail) => `Free credit ${amount}/day${pools ? ` only for pool ${pools}` : ''} — not available for this pool${tail}`,
+    freeQuota: (amt) => `quota ${amt}`,
+    freeRemaining: (amt) => `remaining ${amt}`,
+    showUsage: 'Show usage',
+    hideUsage: 'Hide usage',
+    fetchingUsage: 'Fetching…',
+    keySpend: 'Key spend',
+    keySpendTotal: 'Accumulated / key',
+    viewDashboard: 'View in Dashboard',
+    copyBaseUrlTooltip: 'Click to copy',
+    copiedBaseUrl: (url) => `Copied base URL: ${url}`,
+    copyFailedBaseUrl: (url) => `Could not copy, note manually: ${url}`,
+    spendSummary: (active, used) => `${active ? '✅ Active' : '❌ Inactive'} · Total ${used}`,
+  },
+  token: {
+    title: 'Tokens',
+    inferenceLabel: 'inference (ccsk)',
+    inferenceHint: 'Must be ccsk- followed by 64 hex characters',
+    mgmtLabel: 'management (ccmk)',
+    mgmtHint: 'Must start with ccmk- · sufficient to view all keys',
+    formatError: (hint) => `Invalid format — ${hint}`,
+    saved: (label) => `Saved ${label}`,
+    deleted: (label) => `Deleted ${label}`,
+  },
+  palette: {
+    openLabel: 'MaxPlus: Open Status Page',
+    refreshLabel: 'MaxPlus: Refresh Credit',
+    clearLabel: 'MaxPlus: Clear Tokens',
+    clearedMessage: 'Deleted MaxPlus tokens',
+  },
+  errors: {
+    'no-token': 'Token not set',
+    network: 'Cannot connect to API (network/CORS)',
+    'http-401': '401 Invalid or expired token',
+    'http-402': '402 Credit depleted — top up at /dashboard/topup and wait ~30s',
+    'http-403': '403 Permission denied or key not bound to pool',
+    'http-404': '404 Path not found',
+    'http-409': '409 Incorrect key type (text/image)',
+    'http-429': '429 Rate limit or concurrent limit reached',
+    'http-500': '500 Server error',
+    'http-503': '503 Pool unavailable',
+    'http-504': '504 Gateway timeout',
+  },
+}
+
+const MESSAGES_TH = {
+  chip: {
+    noKey: 'MaxPlus: ไม่มี key',
+    loading: 'MaxPlus …',
+    error: 'MaxPlus !',
+    tooltip: 'MaxPlus — กดดูสรุป',
+    keysCount: (n) => `MaxPlus ${n} key`,
+  },
+  popup: {
+    header: (pool, active) => `คงเหลือ · pool ${pool} · ${active ? '✅ เปิด' : '❌ ปิด'}`,
+    needToken: 'ใส่ ccsk-… ในหน้า MaxPlus ก่อน — มีแค่ management token ก็ดูตาราง key ได้',
+    loading: 'กำลังดึง /v1/me…',
+  },
+  common: {
+    openFull: 'เปิดหน้าเต็ม →',
+    refresh: 'รีเฟรช',
+    refreshed: 'รีเฟรช MaxPlus แล้ว',
+    save: 'บันทึก',
+    change: 'เปลี่ยน',
+    delete: 'ลบ',
+    loading: 'กำลังโหลด…',
+    unavailable: 'ดูไม่ได้',
+    all: 'ทั้งหมด',
+    none: '— ยังไม่มี —',
+    copied: 'คัดลอกลงคลิปบอร์ดแล้ว',
+    copyFailed: 'คัดลอกไม่สำเร็จ',
+    lang: 'ภาษา',
+    langAuto: 'อัตโนมัติ',
+    langEn: 'EN',
+    langTh: 'TH',
+    period1d: '24 ชม.',
+    period7d: '7 วัน',
+    period30d: '30 วัน',
+  },
+  hero: {
+    title: 'เครดิต',
+    needToken: 'ใส่ ccsk-… ด้านล่างก่อน — มีแค่ management token ก็ดูตาราง key ได้',
+    loading: 'กำลังดึง /v1/me…',
+    header: (pool, active) => `คงเหลือ · pool ${pool} · ${active ? '✅ เปิด' : '❌ ปิด'}`,
+    paceWaiting: 'รอ usage 7 วัน…',
+    paceAverage: (perDay) => `เผาเฉลี่ย ${perDay}/วัน`,
+    paceWarn: (perDay, days) => `เผาเฉลี่ย ${perDay}/วัน → เหลือ ~${days} ⚠️`,
+    paceNormal: (perDay, days) => `เผาเฉลี่ย ${perDay}/วัน → เหลือ ~${days}`,
+    lessThanDay: 'ไม่ถึงวัน',
+    daysCount: (days) => `${days} วัน`,
+  },
+  usage: {
+    title: 'usage บัญชี',
+    subtitle: '24 ชม. รีเฟรชทุก 15 วิ',
+    requests: 'requests',
+    tokens: 'tokens',
+    cost: 'cost',
+  },
+  keys: {
+    title: 'key ทุก pool',
+    titleWithCount: (n) => `key ทุก pool · ${n}`,
+    needToken: 'ใส่ ccmk-… (scope keys:read + usage:read ก็พอ)',
+    loading: 'กำลังดึง /v1/api-keys…',
+    empty: 'ไม่มี key ในบัญชี',
+    searchPlaceholder: 'ค้นชื่อ key…',
+    allPools: (n) => `ทั้งหมด (${n})`,
+    shownSummary: (shown, total) => `โชว์ ${shown}/${total} · เรียงตามยอดใช้ (bar = เทียบตัวท็อป)`,
+    noMatch: 'ไม่เจอ key ตรงเงื่อนไข',
+  },
+  card: {
+    active: '✅ เปิด',
+    inactive: '❌ ปิด',
+    accumulated: (spent) => `key นี้ใช้สะสม ${spent} · ไม่จำกัด cap`,
+    capInfo: (cap, used, left) => `cap ${cap} · ใช้ไป ${used} · เหลือ ${left}`,
+    freeTail: (time) => ` · รีเซ็ต ${time}`,
+    freeEligible: (left, tail) => `เครดิตฟรี ${left} · pool นี้ใช้ได้${tail}`,
+    freeIneligible: (amount, pools, tail) => `เครดิตฟรี ${amount}/วัน${pools ? ` เฉพาะ pool ${pools}` : ''} — pool นี้ใช้ไม่ได้${tail}`,
+    freeQuota: (amt) => `โควตา ${amt}`,
+    freeRemaining: (amt) => `เหลือ ${amt}`,
+    showUsage: 'ดู usage',
+    hideUsage: 'ซ่อน usage',
+    fetchingUsage: 'กำลังดึง…',
+    keySpend: 'ยอดใช้ key',
+    keySpendTotal: 'ใช้สะสม/key',
+    viewDashboard: 'ดูใน Dashboard',
+    copyBaseUrlTooltip: 'กดเพื่อ copy',
+    copiedBaseUrl: (url) => `copy base URL แล้ว: ${url}`,
+    copyFailedBaseUrl: (url) => `copy ไม่ได้ จดเอง: ${url}`,
+    spendSummary: (active, used) => `${active ? '✅ เปิด' : '❌ ปิด'} · สะสม ${used}`,
+  },
+  token: {
+    title: 'tokens',
+    inferenceLabel: 'inference (ccsk)',
+    inferenceHint: 'ต้อง ccsk- ตามด้วย hex 64 ตัว',
+    mgmtLabel: 'management (ccmk)',
+    mgmtHint: 'ต้องขึ้นต้น ccmk- · ดู key ทุก pool แค่นี้ก็พอ',
+    formatError: (hint) => `รูปแบบไม่ถูก — ${hint}`,
+    saved: (label) => `บันทึก ${label} แล้ว`,
+    deleted: (label) => `ลบ ${label} แล้ว`,
+  },
+  palette: {
+    openLabel: 'MaxPlus: เปิดหน้าสถานะ',
+    refreshLabel: 'MaxPlus: รีเฟรชเครดิต',
+    clearLabel: 'MaxPlus: ลบ tokens',
+    clearedMessage: 'ลบ MaxPlus tokens แล้ว',
+  },
+  errors: {
+    'no-token': 'ยังไม่ได้ตั้ง token',
+    network: 'ต่อ API ไม่ได้ (เน็ต/CORS)',
+    'http-401': '401 token ผิด/หมดอายุ',
+    'http-402': '402 เครดิตหมด — เติมที่ /dashboard/topup แล้วรอ ~30s',
+    'http-403': '403 สิทธิ์ไม่พอ หรือ key ไม่ผูก pool',
+    'http-404': '404 path ผิด',
+    'http-409': '409 key ผิดประเภท (text/image)',
+    'http-429': '429 ชน cap/concurrent',
+    'http-500': '500 เซิร์ฟเวอร์มีปัญหา',
+    'http-503': '503 pool ล่ม',
+    'http-504': '504 timeout',
+  },
+}
+
+function resolveMsg(dict, key, args = []) {
+  if (!dict) return null
+  const val = key.split('.').reduce((acc, part) => (acc && typeof acc === 'object' ? acc[part] : undefined), dict)
+  if (typeof val === 'string') return val
+  if (typeof val === 'function') return val(...args)
+  return null
 }
 
 function errKey(err) {
@@ -63,22 +291,34 @@ function fmtUsd(n) {
   return typeof n === 'number' && Number.isFinite(n) ? `$${n.toFixed(2)}` : '—'
 }
 
-const TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTHS_TH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 
-// daily_free_credit.reset_at เป็น ISO datetime (Asia/Bangkok) — แสดงสั้นๆ พอ
-function fmtReset(iso) {
+function fmtReset(iso, isTh) {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
   const p = (n) => String(n).padStart(2, '0')
-  return `${d.getDate()} ${TH_MON[d.getMonth()]} ${p(d.getHours())}:${p(d.getMinutes())}`
+  const mList = isTh === false ? MONTHS_EN : MONTHS_TH
+  return `${d.getDate()} ${mList[d.getMonth()]} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-// เครดิตฟรีรายวัน = ถังที่สอง แยกจาก credit_usd และ "ผูก pool"
-// pool ที่ key นี้ใช้ต้องอยู่ใน free.pools[] ไม่งั้น remaining_for_key_pool_usd = 0
-function freeLine(free) {
+const ERR_TH = MESSAGES_TH.errors
+
+function freeLine(free, tr, isTh) {
   if (!free || !free.enabled || typeof free.amount !== 'number') return null
-  const reset = fmtReset(free.resetAt)
+  if (tr) {
+    const reset = fmtReset(free.resetAt, isTh)
+    const tail = reset ? tr('card.freeTail', reset) : ''
+    const poolTxt = Array.isArray(free.pools) && free.pools.length ? free.pools.join(', ') : null
+    if (free.eligible) {
+      const left = typeof free.remainingForKeyPool === 'number' ? free.remainingForKeyPool : free.remaining
+      const leftTxt = typeof left === 'number' ? tr('card.freeRemaining', fmtUsd(left)) : tr('card.freeQuota', fmtUsd(free.amount))
+      return tr('card.freeEligible', leftTxt, tail)
+    }
+    return tr('card.freeIneligible', fmtUsd(free.amount), poolTxt, tail)
+  }
+  const reset = fmtReset(free.resetAt, true)
   const tail = reset ? ` · รีเซ็ต ${reset}` : ''
   const poolTxt = Array.isArray(free.pools) && free.pools.length ? free.pools.join(', ') : null
   if (free.eligible) {
@@ -90,11 +330,11 @@ function freeLine(free) {
 }
 
 function totalsOf(json) {
-  return ((json && json.totals) || json || {})
+  return (json && json.totals) || json || {}
 }
 
 function costOf(t) {
-  const v = t.total_cost_usd ?? t.total_cost ?? t.cost_usd
+  const v = t && (t.total_cost_usd ?? t.total_cost ?? t.cost_usd)
   return typeof v === 'number' ? v : null
 }
 
@@ -106,6 +346,7 @@ function fmtTokens(n) {
 }
 
 function tokensOf(t) {
+  if (!t || typeof t !== 'object') return 0
   const pick = (...ks) => {
     for (const k of ks) if (typeof t[k] === 'number') return t[k]
     return 0
@@ -121,7 +362,6 @@ function pickKey(me) {
   const k = (me && me.key) || {}
   const f = (me && me.daily_free_credit) || {}
   return {
-    // field จริงจาก API คือ key.pool (runbook เดิมเขียน key_pool — เก็บ fallback ไว้)
     pool: k.pool || k.key_pool || f.key_pool || '—',
     limit: k.limit_usd ?? null,
     used: k.limit_used_usd ?? null,
@@ -178,6 +418,28 @@ function Section({ title, right, children }) {
   })
 }
 
+function CapInfo({ k, fallback, tr }) {
+  if (typeof k.limit === 'number' && typeof k.used === 'number') {
+    return jsxs('div', {
+      className: 'flex flex-col gap-0.5',
+      children: [
+        jsx(SpendBar, { ratio: k.used / k.limit }),
+        jsx('div', {
+          className: 'text-xs text-(--ui-text-tertiary)',
+          children: tr('card.capInfo', fmtUsd(k.limit), fmtUsd(k.used), fmtUsd(k.limit - k.used)),
+        }),
+      ],
+    })
+  }
+  if (fallback) {
+    return jsx('div', {
+      className: 'text-xs text-(--ui-text-tertiary)',
+      children: tr('card.accumulated', fmtUsd(k.used)),
+    })
+  }
+  return null
+}
+
 function SpendBar({ ratio }) {
   const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)))
   return jsx('div', {
@@ -189,17 +451,18 @@ function SpendBar({ ratio }) {
 }
 
 export default {
-  id: ID, // must match the folder name / repo root artifact
+  id: ID,
   name: 'MaxPlus Credit',
-  defaultEnabled: false, // opt-in: user flips it on in Capabilities → Plugins
+  defaultEnabled: false,
   register(ctx) {
+    ctx.i18n.register({ en: MESSAGES_EN, th: MESSAGES_TH })
+
     const $token = atom(ctx.storage.get('token', ''))
     const $mgmt = atom(ctx.storage.get('mgmt', ''))
-
-    // cleanup ครั้งเดียว (idempotent): 'baseline' เป็นของ "จับงบไหม้" ที่ถอดออกแล้ว
-    // (commit 3835fc5) — ไม่มีโค้ดอ่านค่านี้อีกแล้ว จึงลบทิ้งให้ storage สะอาด
-    try { ctx.storage.remove('baseline') } catch { /* ไม่มี key นี้แล้ว / storage ปิดอยู่ — ไม่เป็นไร */ }
+    const $lang = atom(ctx.storage.get('lang', 'auto'))
     const $focusKey = atom(null)
+
+    try { ctx.storage.remove('baseline') } catch {}
 
     function setStored($a, storeKey, t) {
       if (t) ctx.storage.set(storeKey, t)
@@ -207,12 +470,48 @@ export default {
       $a.set(t)
     }
 
+    function setLang(l) {
+      if (l && l !== 'auto') ctx.storage.set('lang', l)
+      else ctx.storage.remove('lang')
+      $lang.set(l || 'auto')
+    }
+
+    function useT() {
+      const appT = usePluginI18n(ID)
+      const userLang = useValue($lang)
+      return (key, ...args) => {
+        if (userLang === 'th') {
+          return resolveMsg(MESSAGES_TH, key, args) ?? resolveMsg(MESSAGES_EN, key, args) ?? key
+        }
+        if (userLang === 'en') {
+          return resolveMsg(MESSAGES_EN, key, args) ?? key
+        }
+        return appT(key, ...args)
+      }
+    }
+
+    function t(key, ...args) {
+      const userLang = $lang.get()
+      if (userLang === 'th') {
+        return resolveMsg(MESSAGES_TH, key, args) ?? resolveMsg(MESSAGES_EN, key, args) ?? key
+      }
+      if (userLang === 'en') {
+        return resolveMsg(MESSAGES_EN, key, args) ?? key
+      }
+      return ctx.i18n.t(key, ...args)
+    }
+
+    function getErrorMessage(err, translator) {
+      const k = errKey(err)
+      return translator(`errors.${k}`) || translator('common.unavailable')
+    }
+
     async function apiWith(token, path) {
       if (!token) throw new Error('no-token')
       let res
       try {
         res = await fetch(`${API}${path}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `${AUTH} ${token}` },
         })
       } catch {
         throw new Error('network')
@@ -226,34 +525,9 @@ export default {
     const fetchKeys = () => apiWith($mgmt.get(), '/v1/api-keys')
     const fetchKeyUsage = (kid) => apiWith($mgmt.get(), `/v1/api-keys/${encodeURIComponent(kid)}/usage`)
 
-    // แท็บช่วงเวลาใช้ร่วมกันทั้ง chip popup และหน้าเต็ม
-    const PERIODS = [
-      { id: '1d', label: '24 ชม.' },
-      { id: '7d', label: '7 วัน' },
-      { id: '30d', label: '30 วัน' },
-    ]
-
     function baseFor(pool) {
       const p = String(pool || 'auto')
       return p === 'native' ? `${API}/v1` : `${API}/${p}/v1`
-    }
-
-    // Full-URL request (pool base URLs are absolute, not API-relative).
-    // Used by the smoke test: GET {pool}/v1/models + POST …/chat/completions.
-    async function apiUrl(token, url, opts) {
-      if (!token) throw new Error('no-token')
-      const o = opts || {}
-      let res
-      try {
-        res = await fetch(url, {
-          ...o,
-          headers: { Authorization: AUTH + ' ' + token, ...((o && o.headers) || {}) },
-        })
-      } catch {
-        throw new Error('network')
-      }
-      if (!res.ok) throw new Error(`http-${res.status}`)
-      return res.json()
     }
 
     function useMeQuery() {
@@ -284,9 +558,54 @@ export default {
         queryKey: [ID, 'usage', period],
         queryFn: () => fetchUsage(period),
         enabled: !!token,
-        // 1d รีเฟรชทุก 15 วิแบบ dashboard (โควต้า 20 ครั้ง/นาที เหลือเฟือ)
         refetchInterval: period === '1d' ? 15000 : 300000,
         retry: false,
+      })
+    }
+
+    /* ─── Language switcher ─────────────────────────── */
+
+    function LangSwitch() {
+      const lang = useValue($lang)
+      const tr = useT()
+      return jsxs('div', {
+        className: 'flex items-center gap-0.5 rounded-sm border border-(--ui-stroke-secondary) p-0.5 text-xs',
+        children: [
+          jsx('button', {
+            type: 'button',
+            onClick: () => {
+              haptic('tap')
+              setLang('auto')
+            },
+            className: `rounded px-1.5 py-0.5 text-[0.6875rem] transition-colors ${
+              lang === 'auto' ? 'bg-blue-500/20 text-blue-300 font-medium' : 'text-(--ui-text-tertiary) hover:text-foreground'
+            }`,
+            title: 'Auto (Follow App Language)',
+            children: tr('common.langAuto'),
+          }),
+          jsx('button', {
+            type: 'button',
+            onClick: () => {
+              haptic('tap')
+              setLang('en')
+            },
+            className: `rounded px-1.5 py-0.5 text-[0.6875rem] transition-colors ${
+              lang === 'en' ? 'bg-blue-500/20 text-blue-300 font-medium' : 'text-(--ui-text-tertiary) hover:text-foreground'
+            }`,
+            children: tr('common.langEn'),
+          }),
+          jsx('button', {
+            type: 'button',
+            onClick: () => {
+              haptic('tap')
+              setLang('th')
+            },
+            className: `rounded px-1.5 py-0.5 text-[0.6875rem] transition-colors ${
+              lang === 'th' ? 'bg-blue-500/20 text-blue-300 font-medium' : 'text-(--ui-text-tertiary) hover:text-foreground'
+            }`,
+            children: tr('common.langTh'),
+          }),
+        ],
       })
     }
 
@@ -294,6 +613,10 @@ export default {
       const token = useValue($token)
       const me = useMeQuery()
       const [period, setPeriod] = useState('1d')
+      const tr = useT()
+      const currentLang = useValue($lang)
+      const isTh = currentLang === 'th'
+
       const refresh = () => {
         haptic('tap')
         queryClient.invalidateQueries({ queryKey: [ID] })
@@ -309,13 +632,13 @@ export default {
             type: 'button',
             onClick: openFull,
             className: 'flex-1 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-            children: 'เปิดหน้าเต็ม →',
+            children: tr('common.openFull'),
           }),
           jsx('button', {
             type: 'button',
             onClick: refresh,
             className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-            children: 'รีเฟรช',
+            children: tr('common.refresh'),
           }),
         ],
       })
@@ -323,7 +646,7 @@ export default {
         return jsxs('div', {
           className: 'flex flex-col gap-1.5',
           children: [
-            jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ใส่ ccsk-… ในหน้า MaxPlus ก่อน — มีแค่ management token ก็ดูตาราง key ได้' }),
+            jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('popup.needToken') }),
             footer,
           ],
         })
@@ -332,7 +655,7 @@ export default {
         return jsxs('div', {
           className: 'flex flex-col gap-1.5',
           children: [
-            jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'กำลังดึง /v1/me…' }),
+            jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('popup.loading') }),
             footer,
           ],
         })
@@ -341,14 +664,21 @@ export default {
         return jsxs('div', {
           className: 'flex flex-col gap-1.5',
           children: [
-            jsx('div', { className: 'text-sm', children: ERR_TH[errKey(me.error)] || 'ดูไม่ได้' }),
+            jsx('div', { className: 'text-sm', children: getErrorMessage(me.error, tr) }),
             footer,
           ],
         })
       }
       const k = pickKey(me.data)
       const bal = me.data && me.data.credit_usd
-      const freeText = freeLine(k.free)
+      const freeText = freeLine(k.free, tr, isTh)
+
+      const periodsList = [
+        { id: '1d', label: tr('common.period1d') },
+        { id: '7d', label: tr('common.period7d') },
+        { id: '30d', label: tr('common.period30d') },
+      ]
+
       return jsxs('div', {
         style: { maxHeight: '60vh', overflowY: 'auto' },
         className: 'flex flex-col gap-2',
@@ -356,22 +686,14 @@ export default {
           jsxs('div', {
             className: 'flex flex-col gap-0.5',
             children: [
-              jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `คงเหลือ · pool ${k.pool} · ${k.active === false ? '❌ ปิด' : '✅ เปิด'}` }),
+              jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('popup.header', k.pool, k.active !== false) }),
               jsx('div', {
                 style: { fontSize: 26, fontWeight: 650, lineHeight: 1.15 },
                 className: 'font-mono tabular-nums',
                 children: fmtUsd(bal),
               }),
               freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: freeText }) : null,
-              typeof k.limit === 'number' && typeof k.used === 'number'
-                ? jsxs('div', {
-                    className: 'flex flex-col gap-0.5',
-                    children: [
-                      jsx(SpendBar, { ratio: k.used / k.limit }),
-                      jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `cap ${fmtUsd(k.limit)} · ใช้ไป ${fmtUsd(k.used)} · เหลือ ${fmtUsd(k.limit - k.used)}` }),
-                    ],
-                  })
-                : null,
+              jsx(CapInfo, { k, tr }),
             ],
           }),
           jsxs('div', {
@@ -379,7 +701,7 @@ export default {
             children: [
               jsxs('div', {
                 className: 'flex gap-1',
-                children: PERIODS.map((p) => jsx('button', {
+                children: periodsList.map((p) => jsx('button', {
                   type: 'button',
                   onClick: () => {
                     haptic('tap')
@@ -404,17 +726,19 @@ export default {
       const mgmt = useValue($mgmt)
       const me = useMeQuery()
       const keys = useKeysQuery()
-      let label = 'MaxPlus: ไม่มี key'
+      const tr = useT()
+
+      let label = tr('chip.noKey')
       if (token) {
         if (me.data) {
           const c = me.data.credit_usd
           label = typeof c === 'number' ? `MaxPlus $${c.toFixed(2)}` : 'MaxPlus'
-        } else if (me.isLoading) label = 'MaxPlus …'
-        else if (me.error) label = 'MaxPlus !'
+        } else if (me.isLoading) label = tr('chip.loading')
+        else if (me.error) label = tr('chip.error')
       } else if (mgmt) {
-        if (keys.data) label = `MaxPlus ${pickKeyList(keys.data).length} key`
-        else if (keys.isLoading) label = 'MaxPlus …'
-        else if (keys.error) label = 'MaxPlus !'
+        if (keys.data) label = tr('chip.keysCount', pickKeyList(keys.data).length)
+        else if (keys.isLoading) label = tr('chip.loading')
+        else if (keys.error) label = tr('chip.error')
       }
       return jsxs(Popover, {
         children: [
@@ -422,7 +746,7 @@ export default {
             asChild: true,
             children: jsx('button', {
               type: 'button',
-              title: 'MaxPlus — กดดูสรุป',
+              title: tr('chip.tooltip'),
               className: 'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
               onClick: () => {
                 haptic('tap')
@@ -445,21 +769,22 @@ export default {
     function TokenField({ $a, storeKey, label, placeholder, pattern, hint }) {
       const cur = useValue($a)
       const [draft, setDraft] = useState('')
+      const tr = useT()
       const save = () => {
-        const t = draft.trim()
-        if (t && !pattern.test(t)) {
-          host.notify({ kind: 'info', message: `รูปแบบไม่ถูก — ${hint}` })
+        const str = draft.trim()
+        if (str && !pattern.test(str)) {
+          host.notify({ kind: 'info', message: tr('token.formatError', hint) })
           return
         }
-        setStored($a, storeKey, t)
+        setStored($a, storeKey, str)
         setDraft('')
         queryClient.invalidateQueries({ queryKey: [ID] })
-        host.notify({ kind: 'info', message: t ? `บันทึก ${label} แล้ว` : `ลบ ${label} แล้ว` })
+        host.notify({ kind: 'info', message: str ? tr('token.saved', label) : tr('token.deleted', label) })
       }
       return jsxs('div', {
         className: 'flex flex-col gap-1.5',
         children: [
-          jsx(Row, { label, value: cur ? maskToken(cur) : '— ยังไม่มี —' }),
+          jsx(Row, { label, value: cur ? maskToken(cur) : tr('common.none') }),
           jsxs('div', {
             className: 'flex gap-1.5',
             children: [
@@ -479,7 +804,7 @@ export default {
                 type: 'button',
                 onClick: save,
                 className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                children: cur ? 'เปลี่ยน' : 'บันทึก',
+                children: cur ? tr('common.change') : tr('common.save'),
               }),
               cur
                 ? jsx('button', {
@@ -488,10 +813,10 @@ export default {
                       setStored($a, storeKey, '')
                       setDraft('')
                       queryClient.invalidateQueries({ queryKey: [ID] })
-                      host.notify({ kind: 'info', message: `ลบ ${label} แล้ว` })
+                      host.notify({ kind: 'info', message: tr('token.deleted', label) })
                     },
                     className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-                    children: 'ลบ',
+                    children: tr('common.delete'),
                   })
                 : null,
             ],
@@ -503,18 +828,19 @@ export default {
     function UsageBlock({ period, label }) {
       const token = useValue($token)
       const q = useUsageQuery(period)
+      const tr = useT()
       if (!token) return null
-      if (q.isLoading) return jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: `${label}กำลังโหลด…` })
-      if (q.error) return jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: `${label}${ERR_TH[errKey(q.error)] || 'ดูไม่ได้'}` })
-      const t = totalsOf(q.data)
-      const req = t.request_count ?? t.requests ?? null
-      const tok = tokensOf(t)
+      if (q.isLoading) return jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: `${label}${tr('common.loading')}` })
+      if (q.error) return jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: `${label}${getErrorMessage(q.error, tr)}` })
+      const tData = totalsOf(q.data)
+      const req = tData.request_count ?? tData.requests ?? null
+      const tok = tokensOf(tData)
       return jsxs('div', {
         className: 'flex flex-col gap-0.5',
         children: [
-          req != null ? jsx(Row, { label: `${label}requests`, value: String(req) }) : null,
-          tok ? jsx(Row, { label: `${label}tokens`, value: fmtTokens(tok) }) : null,
-          jsx(Row, { label: `${label}cost`, value: fmtUsd(costOf(t)) }),
+          req != null ? jsx(Row, { label: `${label}${tr('usage.requests')}`, value: String(req) }) : null,
+          tok ? jsx(Row, { label: `${label}${tr('usage.tokens')}`, value: fmtTokens(tok) }) : null,
+          jsx(Row, { label: `${label}${tr('usage.cost')}`, value: fmtUsd(costOf(tData)) }),
         ],
       })
     }
@@ -522,6 +848,7 @@ export default {
     function KeyCard({ k, maxUsed }) {
       const focus = useValue($focusKey)
       const mgmt = useValue($mgmt)
+      const tr = useT()
       const open = focus === k.id
       const u = useQuery({
         queryKey: [ID, 'key-usage', k.id],
@@ -529,12 +856,11 @@ export default {
         enabled: !!mgmt && open,
         retry: false,
       })
-      const [scheme, setScheme] = useState('dark')
       const used = typeof k.used_usd === 'number' ? k.used_usd : null
       const curPool = String(k.pool || 'auto')
       const copyBase = async () => {
         const ok = await ctx.os.writeClipboard(baseFor(curPool))
-        host.notify({ kind: 'info', message: ok ? `copy base URL แล้ว: ${baseFor(curPool)}` : 'copy ไม่ได้ จดเอง: ' + baseFor(curPool) })
+        host.notify({ kind: 'info', message: ok ? tr('card.copiedBaseUrl', baseFor(curPool)) : tr('card.copyFailedBaseUrl', baseFor(curPool)) })
       }
       return jsxs('div', {
         className: 'flex flex-col gap-1 rounded-sm border border-(--ui-stroke-secondary) p-1.5',
@@ -545,7 +871,7 @@ export default {
               jsx('span', { className: 'truncate text-sm font-medium', children: k.name || k.id }),
               jsx('span', {
                 className: 'shrink-0 font-mono text-xs text-(--ui-text-tertiary)',
-                children: `${k.active === false ? '❌ ปิด' : '✅ เปิด'} · สะสม ${fmtUsd(used)}`,
+                children: tr('card.spendSummary', k.active !== false, fmtUsd(used)),
               }),
             ],
           }),
@@ -559,7 +885,7 @@ export default {
               jsx('span', { className: 'shrink-0 text-(--ui-text-tertiary)', children: 'base URL' }),
               jsx('button', {
                 type: 'button',
-                title: 'กดเพื่อ copy',
+                title: tr('card.copyBaseUrlTooltip'),
                 onClick: copyBase,
                 className: 'truncate font-mono text-xs tabular-nums hover:bg-(--chrome-action-hover)',
                 children: baseFor(curPool),
@@ -576,52 +902,49 @@ export default {
                   $focusKey.set(open ? null : k.id)
                 },
                 className: 'mt-0.5 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                children: open ? 'ซ่อน usage' : 'ดู usage',
+                children: open ? tr('card.hideUsage') : tr('card.showUsage'),
               }),
             ],
           }),
           open
             ? (u.isLoading
-                ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'กำลังดึง…' })
+                ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('card.fetchingUsage') })
                 : u.error
-                  ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: ERR_TH[errKey(u.error)] || 'ดูไม่ได้' })
+                  ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: getErrorMessage(u.error, tr) })
                   : (() => {
-                      // shape จริงของ /v1/api-keys/{id}/usage แปรผัน ({totals…} vs {key:{used_usd…}})
                       const d = u.data || {}
                       const v = costOf(totalsOf(d)) ?? (typeof d.cost_usd === 'number' ? d.cost_usd : null)
-                      if (v != null) return jsx(Row, { label: 'ยอดใช้ key', value: fmtUsd(v) })
+                      if (v != null) return jsx(Row, { label: tr('card.keySpend'), value: fmtUsd(v) })
                       const acc = (d.key && d.key.used_usd) ?? (typeof k.used_usd === 'number' ? k.used_usd : null)
-                      if (typeof acc === 'number') return jsx(Row, { label: 'ใช้สะสม/key', value: fmtUsd(acc) })
-                      return jsx(Row, { label: 'ยอดใช้ key', value: 'ดูใน Dashboard' })
+                      if (typeof acc === 'number') return jsx(Row, { label: tr('card.keySpendTotal'), value: fmtUsd(acc) })
+                      return jsx(Row, { label: tr('card.keySpend'), value: tr('card.viewDashboard') })
                     })())
             : null,
         ],
       })
     }
 
-    // Feature 1 — one-click smoke test (runbook §5.4):
-    // me → models of this key's pool → tiny non-stream chat.
-    // Pass = 200 + content on every step (not 401/403) with sane latency.
     function KeysSection() {
       const mgmt = useValue($mgmt)
       const q = useKeysQuery()
+      const tr = useT()
       const [poolFilter, setPoolFilter] = useState('all')
       const [text, setText] = useState('')
       if (!mgmt) {
         return jsx(Section, {
-          title: 'key ทุก pool',
-          children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ใส่ ccmk-… (scope keys:read + usage:read ก็พอ)' }),
+          title: tr('keys.title'),
+          children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('keys.needToken') }),
         })
       }
       if (q.isLoading) {
-        return jsx(Section, { title: 'key ทุก pool', children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'กำลังดึง /v1/api-keys…' }) })
+        return jsx(Section, { title: tr('keys.title'), children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('keys.loading') }) })
       }
       if (q.error) {
-        return jsx(Section, { title: 'key ทุก pool', children: jsx('div', { className: 'text-sm', children: ERR_TH[errKey(q.error)] || 'ดูไม่ได้' }) })
+        return jsx(Section, { title: tr('keys.title'), children: jsx('div', { className: 'text-sm', children: getErrorMessage(q.error, tr) }) })
       }
       const list = pickKeyList(q.data)
       if (!list.length) {
-        return jsx(Section, { title: 'key ทุก pool', children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ไม่มี key ในบัญชี' }) })
+        return jsx(Section, { title: tr('keys.title'), children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('keys.empty') }) })
       }
       const pools = [...new Set(list.map((k) => String(k.pool || 'auto')))].sort()
       const needle = text.trim().toLowerCase()
@@ -641,30 +964,30 @@ export default {
         children: label,
       })
       return jsx(Section, {
-        title: `key ทุก pool · ${list.length}`,
+        title: tr('keys.titleWithCount', list.length),
         children: jsxs('div', {
           className: 'flex flex-col gap-1.5',
           children: [
             jsx('input', {
               value: text,
               spellCheck: false,
-              placeholder: 'ค้นชื่อ key…',
+              placeholder: tr('keys.searchPlaceholder'),
               onChange: (e) => setText(e.target.value),
               className: 'min-w-0 flex-1 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 text-xs',
             }),
             jsxs('div', {
-              className: 'flex gap-1 overflow-y-auto',
-              children: [chipBtn('all', `ทั้งหมด (${list.length})`, poolFilter === 'all'), ...pools.map((p) => chipBtn(p, p, poolFilter === p))],
+              className: 'flex gap-1 overflow-x-auto pb-0.5',
+              children: [chipBtn('all', tr('keys.allPools', list.length), poolFilter === 'all'), ...pools.map((p) => chipBtn(p, p, poolFilter === p))],
             }),
             shown.length
               ? jsxs('div', {
                   className: 'flex flex-col gap-1.5',
                   children: [
-                    jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `โชว์ ${shown.length}/${list.length} · เรียงตามยอดใช้ (bar = เทียบตัวท็อป)` }),
+                    jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('keys.shownSummary', shown.length, list.length) }),
                     ...shown.map((k) => jsx(KeyCard, { k, maxUsed }, k.id)),
                   ],
                 })
-              : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'ไม่เจอ key ตรงเงื่อนไข' }),
+              : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('keys.noMatch') }),
           ],
         }),
       })
@@ -674,17 +997,21 @@ export default {
       const token = useValue($token)
       const me = useMeQuery()
       const u7 = useUsageQuery('7d')
+      const tr = useT()
+      const currentLang = useValue($lang)
+      const isTh = currentLang === 'th'
+
       if (!token) {
         return jsx(Section, {
-          title: 'เครดิต',
-          children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'ใส่ ccsk-… ด้านล่างก่อน — มีแค่ management token ก็ดูตาราง key ได้' }),
+          title: tr('hero.title'),
+          children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('hero.needToken') }),
         })
       }
       if (me.isLoading) {
-        return jsx(Section, { title: 'เครดิต', children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: 'กำลังดึง /v1/me…' }) })
+        return jsx(Section, { title: tr('hero.title'), children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('hero.loading') }) })
       }
       if (me.error) {
-        return jsx(Section, { title: 'เครดิต', children: jsx('div', { className: 'text-sm', children: ERR_TH[errKey(me.error)] || 'ดูไม่ได้' }) })
+        return jsx(Section, { title: tr('hero.title'), children: jsx('div', { className: 'text-sm', children: getErrorMessage(me.error, tr) }) })
       }
       const k = pickKey(me.data)
       const bal = me.data && me.data.credit_usd
@@ -692,15 +1019,15 @@ export default {
       const perDay = c7 != null ? c7 / 7 : null
       const days = typeof bal === 'number' && perDay > 0 ? bal / perDay : null
       const pace = days == null
-        ? (c7 != null ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน` : 'รอ usage 7 วัน…')
+        ? (c7 != null ? tr('hero.paceAverage', fmtUsd(perDay)) : tr('hero.paceWaiting'))
         : days < 3
-          ? `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${days < 1 ? 'ไม่ถึงวัน' : `${Math.floor(days)} วัน`} ⚠️`
-          : `เผาเฉลี่ย ${fmtUsd(perDay)}/วัน → เหลือ ~${Math.floor(days)} วัน`
-      const freeText = freeLine(k.free)
+          ? tr('hero.paceWarn', fmtUsd(perDay), days < 1 ? tr('hero.lessThanDay') : tr('hero.daysCount', Math.floor(days)))
+          : tr('hero.paceNormal', fmtUsd(perDay), tr('hero.daysCount', Math.floor(days)))
+      const freeText = freeLine(k.free, tr, isTh)
       return jsxs('div', {
         className: 'flex flex-col gap-0.5 rounded-md border border-(--ui-stroke-secondary) p-3',
         children: [
-          jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `คงเหลือ · pool ${k.pool} · ${k.active === false ? '❌ ปิด' : '✅ เปิด'}` }),
+          jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('hero.header', k.pool, k.active !== false) }),
           jsx('div', {
             style: { fontSize: 30, fontWeight: 650, lineHeight: 1.15 },
             className: 'font-mono tabular-nums',
@@ -708,25 +1035,25 @@ export default {
           }),
           jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: pace }),
           freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: freeText }) : null,
-          typeof k.limit === 'number' && typeof k.used === 'number'
-            ? jsxs('div', {
-                className: 'flex flex-col gap-0.5',
-                children: [
-                  jsx(SpendBar, { ratio: k.used / k.limit }),
-                  jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `cap ${fmtUsd(k.limit)} · ใช้ไป ${fmtUsd(k.used)} · เหลือ ${fmtUsd(k.limit - k.used)}` }),
-                ],
-              })
-            : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: `key นี้ใช้สะสม ${fmtUsd(k.used)} · ไม่จำกัด cap` }),
+          jsx(CapInfo, { k, fallback: true, tr }),
         ],
       })
     }
 
     function StatusPage() {
       const [usagePeriod, setUsagePeriod] = useState('1d')
+      const tr = useT()
       const refresh = () => {
         queryClient.invalidateQueries({ queryKey: [ID] })
-        host.notify({ kind: 'info', message: 'รีเฟรช MaxPlus แล้ว' })
+        host.notify({ kind: 'info', message: tr('common.refreshed') })
       }
+
+      const periodsList = [
+        { id: '1d', label: tr('common.period1d') },
+        { id: '7d', label: tr('common.period7d') },
+        { id: '30d', label: tr('common.period30d') },
+      ]
+
       return jsxs('div', {
         className: 'flex h-full flex-col gap-2 overflow-y-auto p-3 text-sm',
         children: [
@@ -734,24 +1061,30 @@ export default {
             className: 'flex items-center justify-between',
             children: [
               jsx('div', { className: 'font-medium', children: 'MaxPlus' }),
-              jsx('button', {
-                type: 'button',
-                onClick: refresh,
-                className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                children: 'รีเฟรช',
+              jsxs('div', {
+                className: 'flex items-center gap-2',
+                children: [
+                  jsx(LangSwitch, {}),
+                  jsx('button', {
+                    type: 'button',
+                    onClick: refresh,
+                    className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
+                    children: tr('common.refresh'),
+                  }),
+                ],
               }),
             ],
           }),
           jsx(HeroSection, {}),
           jsx(Section, {
-            title: 'usage บัญชี',
-            right: jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: '24 ชม. รีเฟรชทุก 15 วิ' }),
+            title: tr('usage.title'),
+            right: jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('usage.subtitle') }),
             children: jsxs('div', {
               className: 'flex flex-col gap-2',
               children: [
                 jsx('div', {
                   className: 'flex gap-1',
-                  children: PERIODS.map((p) => jsx('button', {
+                  children: periodsList.map((p) => jsx('button', {
                     type: 'button',
                     onClick: () => {
                       haptic('tap')
@@ -769,25 +1102,25 @@ export default {
           }),
           jsx(KeysSection, {}),
           jsx(Section, {
-            title: 'tokens',
+            title: tr('token.title'),
             children: jsxs('div', {
               className: 'flex flex-col gap-2',
               children: [
                 jsx(TokenField, {
                   $a: $token,
                   storeKey: 'token',
-                  label: 'inference (ccsk)',
+                  label: tr('token.inferenceLabel'),
                   placeholder: 'ccsk-…',
                   pattern: KEY_RE,
-                  hint: 'ต้อง ccsk- ตามด้วย hex 64 ตัว',
+                  hint: tr('token.inferenceHint'),
                 }),
                 jsx(TokenField, {
                   $a: $mgmt,
                   storeKey: 'mgmt',
-                  label: 'management (ccmk)',
+                  label: tr('token.mgmtLabel'),
                   placeholder: 'ccmk-…',
                   pattern: MGMT_RE,
-                  hint: 'ต้องขึ้นต้น ccmk- · ดู key ทุก pool แค่นี้ก็พอ',
+                  hint: tr('token.mgmtHint'),
                 }),
               ],
             }),
@@ -822,8 +1155,8 @@ export default {
         area: PALETTE_AREA,
         data: {
           id: 'maxplus.open',
-          label: 'MaxPlus: เปิดหน้าสถานะ',
-          keywords: ['maxplus', 'credit', 'เครดิต', 'คีย์', 'status'],
+          label: MESSAGES_EN.palette.openLabel,
+          keywords: ['maxplus', 'credit', 'เครดิต', 'คีย์', 'status', 'เปิด'],
           run: () => host.navigate('/maxplus'),
         },
       },
@@ -832,11 +1165,11 @@ export default {
         area: PALETTE_AREA,
         data: {
           id: 'maxplus.refresh',
-          label: 'MaxPlus: รีเฟรชเครดิต',
+          label: MESSAGES_EN.palette.refreshLabel,
           keywords: ['maxplus', 'refresh', 'รีเฟรช'],
           run: () => {
             queryClient.invalidateQueries({ queryKey: [ID] })
-            host.notify({ kind: 'info', message: 'รีเฟรช MaxPlus แล้ว' })
+            host.notify({ kind: 'info', message: t('common.refreshed') })
           },
         },
       },
@@ -845,13 +1178,13 @@ export default {
         area: PALETTE_AREA,
         data: {
           id: 'maxplus.clear',
-          label: 'MaxPlus: ลบ tokens',
+          label: MESSAGES_EN.palette.clearLabel,
           keywords: ['maxplus', 'token', 'clear', 'ลบ'],
           run: () => {
             setStored($token, 'token', '')
             setStored($mgmt, 'mgmt', '')
             queryClient.invalidateQueries({ queryKey: [ID] })
-            host.notify({ kind: 'info', message: 'ลบ MaxPlus tokens แล้ว' })
+            host.notify({ kind: 'info', message: t('palette.clearedMessage') })
           },
         },
       },

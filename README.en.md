@@ -1,9 +1,8 @@
-# MaxPlus Credit — Hermes Desktop plugin
+# MaxPlus Credit — Hermes Desktop Plugin
 
 🌏 README in [ไทย](README.md)
 
-View [MaxPlus](https://maxplus-ai.cc/invite/ZSPXWCJB) credit, usage and per-pool keys
-inside Hermes Desktop. Thai UI.
+View [MaxPlus](https://maxplus-ai.cc/invite/ZSPXWCJB) credit balance, usage statistics and per-pool API keys inside Hermes Desktop. Read-only plugin with full bilingual support (English / Thai).
 
 ![status page](docs/status.png)
 
@@ -15,7 +14,7 @@ Chip + summary popup (amounts masked in the sample):
 
 ## Install
 
-**Install from Git** (Settings → Plugins) with this repo,
+**Install from Git** (Settings → Plugins) with repo: `Manchinn/hermes-maxplus-credit`,
 or click:
 
 ```
@@ -26,70 +25,15 @@ hermes://plugin/install?repo=Manchinn/hermes-maxplus-credit&enable=1
 
 After install the file lands at `desktop-plugins/hermes-maxplus-credit/plugin.js`
 — folder name is the repo name, while the plugin `id` inside is `maxplus-credit`.
-Then enable **MaxPlus Credit** in-app (ships opt-in).
+Then enable **MaxPlus Credit** in Settings → Plugins (ships opt-in: `defaultEnabled: false`).
 
-> Tokens are not in that folder — they live in the app's per-plugin storage keyed
-> by `id`, so reinstall/delete keeps them.
+> Tokens are not in that folder — they live in the app's per-plugin storage keyed by `id`, so reinstall/delete keeps them safely.
 
 ## Usage
 
 1. Open the **MaxPlus** page from the sidebar.
-2. Add your **inference token** (`ccsk-…`) for balance + account usage.
-3. Add your **management token** (`ccmk-…`) for the all-keys table.
-   - `keys:read` + `usage:read` scopes are enough for read-only viewing.
-   - Add `keys:update` only for in-plugin pool moves and cap enforcing.
+2. Toggle your preferred language anytime with `[ Auto | EN | TH ]` at the top right.
+3. Add your **inference token** (`ccsk-…`) for balance + account usage.
+4. Add your **management token** (`ccmk-…`) for the all-keys table (`keys:read` + `usage:read` scopes are sufficient).
 
-The status-bar chip shows the balance (`MaxPlus $xx.xx`, polls every 60s) —
-click it for an instant **summary popup**, no need to open the full page.
-
-Move pool: per-key **Move** button → pick a pool → confirm.
-The secret stays valid — just point your client at the shown base URL
-(click it to copy).
-
-Account usage: **24h / 7d / 30d** tabs — shows `requests · tokens · cost` for the
-selected range (the 24h range refreshes every 15s).
-
-Enforce caps: when keys lack a daily cap, an **ใส่ cap (Enforce)** bar appears —
-apply a daily cap to all of them at once (always confirmed first).
-
-> Moved keys 403 until clients follow — don't move a key that is in use.
-
-## What each part does
-
-| Part | Contents |
-| --- | --- |
-| Chip + popup (right status bar) | Balance polled every 60s · click for popup: balance + pool/status + daily free credit (when the account has it) + cap bar (only for keys that have a cap) + compact usage with period tabs (24h / 7d / 30d: requests · tokens · cost) + open-full-page/refresh buttons |
-| MaxPlus page (`/maxplus`) | Credit hero + burn pace + daily free credit · account usage in 24h/7d/30d tabs (`requests · tokens · cost`) · keys table (search/pool filter/sort by spend) + pool moves · cap enforcing · token fields · morning checklist |
-| ⌘K commands | `MaxPlus: เปิดหน้าสถานะ (Open)` · `MaxPlus: รีเฟรชเครดิต (Refresh)` · `MaxPlus: ลบ tokens (Clear)` |
-
-> **About the balance:** `credit_usd` is **account-level** — every pool draws from the
-> same bucket, so there is no per-pool balance to show (pools only differ in
-> pricing/model catalog). **Daily free credit** is a second bucket and **is
-> pool-scoped** — the plugin states whether the pool of the token you entered can
-> use it (`eligible_for_key_pool`).
-
-## Privacy
-
-- Tokens stay in the app's local per-plugin storage, never in this repo.
-- Calls `https://api.maxplus-ai.cc` directly from your machine.
-  No backend, no telemetry.
-- Read-only by default; writes happen only on confirmed actions (pool move / freeze / cap enforce).
-
-## Files
-
-| File | What |
-| --- | --- |
-| `plugin.js` | The plugin (single file, no build) |
-| `README.md` | Thai version (default) |
-| `README.en.md` | This file |
-| `LICENSE` | MIT |
-
-Edit + save `plugin.js` — the Desktop hot-reloads within seconds
-(or ⌘K → Reload desktop plugins).
-
-## SDK
-
-Built on `@hermes/plugin-sdk` only (`react`, `react/jsx-runtime`).
-Reference: https://hermes-agent.nousresearch.com/docs/developer-guide/desktop-plugin-sdk
-
-MIT.
+The status-bar chip shows the balance (`MaxPlus $xx.xx`, polls every 60s) — click it for an instant **summary popup** without opening the full page.
