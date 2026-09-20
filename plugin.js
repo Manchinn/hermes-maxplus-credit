@@ -96,12 +96,13 @@ const MESSAGES_EN = {
   keys: {
     title: 'All Pool Keys',
     titleWithCount: (n) => `All Pool Keys · ${n}`,
+    titleWithCountAndSpend: (n, spent) => `All Pool Keys · ${n} keys · Total ${spent}`,
     needToken: 'Enter ccmk-… (scope keys:read + usage:read is sufficient)',
     loading: 'Fetching /v1/api-keys…',
     empty: 'No keys found in account',
     searchPlaceholder: 'Search key name…',
     allPools: (n) => `All (${n})`,
-    shownSummary: (shown, total) => `Showing ${shown}/${total} · Sorted by spend (bar compares to top key)`,
+    shownSummary: (shown, total) => `Showing ${shown}/${total} · Sorted by spend`,
     noMatch: 'No keys match the criteria',
   },
   card: {
@@ -212,12 +213,13 @@ const MESSAGES_TH = {
   keys: {
     title: 'key ทุก pool',
     titleWithCount: (n) => `key ทุก pool · ${n}`,
+    titleWithCountAndSpend: (n, spent) => `key ทุก pool · ${n} keys · ยอดสะสม ${spent}`,
     needToken: 'ใส่ ccmk-… (scope keys:read + usage:read ก็พอ)',
     loading: 'กำลังดึง /v1/api-keys…',
     empty: 'ไม่มี key ในบัญชี',
     searchPlaceholder: 'ค้นชื่อ key…',
     allPools: (n) => `ทั้งหมด (${n})`,
-    shownSummary: (shown, total) => `โชว์ ${shown}/${total} · เรียงตามยอดใช้ (bar = เทียบตัวท็อป)`,
+    shownSummary: (shown, total) => `โชว์ ${shown}/${total} · เรียงตามยอดใช้สะสม`,
     noMatch: 'ไม่เจอ key ตรงเงื่อนไข',
   },
   card: {
@@ -306,7 +308,7 @@ function fmtReset(iso, isTh) {
 const ERR_TH = MESSAGES_TH.errors
 
 function freeLine(free, tr, isTh) {
-  if (!free || !free.enabled || typeof free.amount !== 'number') return null
+  if (!free || !free.enabled || typeof free.amount !== 'number' || free.amount <= 0) return null
   if (tr) {
     const reset = fmtReset(free.resetAt, isTh)
     const tail = reset ? tr('card.freeTail', reset) : ''
@@ -460,7 +462,6 @@ export default {
     const $token = atom(ctx.storage.get('token', ''))
     const $mgmt = atom(ctx.storage.get('mgmt', ''))
     const $lang = atom(ctx.storage.get('lang', 'auto'))
-    const $focusKey = atom(null)
 
     try { ctx.storage.remove('baseline') } catch {}
 
@@ -523,7 +524,6 @@ export default {
     const fetchMe = () => apiWith($token.get(), '/v1/me')
     const fetchUsage = (period) => apiWith($token.get(), `/v1/usage?period=${period}`)
     const fetchKeys = () => apiWith($mgmt.get(), '/v1/api-keys')
-    const fetchKeyUsage = (kid) => apiWith($mgmt.get(), `/v1/api-keys/${encodeURIComponent(kid)}/usage`)
 
     function baseFor(pool) {
       const p = String(pool || 'auto')
@@ -845,17 +845,8 @@ export default {
       })
     }
 
-    function KeyCard({ k, maxUsed }) {
-      const focus = useValue($focusKey)
-      const mgmt = useValue($mgmt)
+    function KeyCard({ k }) {
       const tr = useT()
-      const open = focus === k.id
-      const u = useQuery({
-        queryKey: [ID, 'key-usage', k.id],
-        queryFn: () => fetchKeyUsage(k.id),
-        enabled: !!mgmt && open,
-        retry: false,
-      })
       const used = typeof k.used_usd === 'number' ? k.used_usd : null
       const curPool = String(k.pool || 'auto')
       const copyBase = async () => {
@@ -875,9 +866,6 @@ export default {
               }),
             ],
           }),
-          maxUsed > 0 && used != null
-            ? jsx(SpendBar, { ratio: used / maxUsed })
-            : null,
           jsx(Row, { label: 'pool', value: curPool }),
           jsxs('div', {
             className: 'flex items-center justify-between gap-2 py-0.5 text-sm',
@@ -892,34 +880,6 @@ export default {
               }),
             ],
           }),
-          jsxs('div', {
-            className: 'flex gap-1.5',
-            children: [
-              jsx('button', {
-                type: 'button',
-                onClick: () => {
-                  haptic('tap')
-                  $focusKey.set(open ? null : k.id)
-                },
-                className: 'mt-0.5 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                children: open ? tr('card.hideUsage') : tr('card.showUsage'),
-              }),
-            ],
-          }),
-          open
-            ? (u.isLoading
-                ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('card.fetchingUsage') })
-                : u.error
-                  ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: getErrorMessage(u.error, tr) })
-                  : (() => {
-                      const d = u.data || {}
-                      const v = costOf(totalsOf(d)) ?? (typeof d.cost_usd === 'number' ? d.cost_usd : null)
-                      if (v != null) return jsx(Row, { label: tr('card.keySpend'), value: fmtUsd(v) })
-                      const acc = (d.key && d.key.used_usd) ?? (typeof k.used_usd === 'number' ? k.used_usd : null)
-                      if (typeof acc === 'number') return jsx(Row, { label: tr('card.keySpendTotal'), value: fmtUsd(acc) })
-                      return jsx(Row, { label: tr('card.keySpend'), value: tr('card.viewDashboard') })
-                    })())
-            : null,
         ],
       })
     }
@@ -947,12 +907,21 @@ export default {
         return jsx(Section, { title: tr('keys.title'), children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('keys.empty') }) })
       }
       const pools = [...new Set(list.map((k) => String(k.pool || 'auto')))].sort()
+      const poolStats = list.reduce((acc, k) => {
+        const p = String(k.pool || 'auto')
+        if (!acc[p]) acc[p] = { count: 0, used: 0 }
+        acc[p].count += 1
+        if (typeof k.used_usd === 'number') acc[p].used += k.used_usd
+        return acc
+      }, {})
+      const totalSpendAllKeys = list.reduce((sum, k) => sum + (typeof k.used_usd === 'number' ? k.used_usd : 0), 0)
+
       const needle = text.trim().toLowerCase()
       const shown = list
         .filter((k) => (poolFilter === 'all' || String(k.pool || 'auto') === poolFilter))
         .filter((k) => !needle || String(k.name || '').toLowerCase().includes(needle) || String(k.id || '').toLowerCase().includes(needle))
         .sort((a, b) => (b.used_usd || 0) - (a.used_usd || 0))
-      const maxUsed = list.reduce((m, k) => Math.max(m, typeof k.used_usd === 'number' ? k.used_usd : 0), 0)
+
       const chipBtn = (id, label, active) => jsx('button', {
         type: 'button',
         onClick: () => {
@@ -964,7 +933,7 @@ export default {
         children: label,
       })
       return jsx(Section, {
-        title: tr('keys.titleWithCount', list.length),
+        title: tr('keys.titleWithCountAndSpend', list.length, fmtUsd(totalSpendAllKeys)),
         children: jsxs('div', {
           className: 'flex flex-col gap-1.5',
           children: [
@@ -977,14 +946,17 @@ export default {
             }),
             jsxs('div', {
               className: 'flex gap-1 overflow-x-auto pb-0.5',
-              children: [chipBtn('all', tr('keys.allPools', list.length), poolFilter === 'all'), ...pools.map((p) => chipBtn(p, p, poolFilter === p))],
+              children: [
+                chipBtn('all', `${tr('common.all')} (${list.length} · ${fmtUsd(totalSpendAllKeys)})`, poolFilter === 'all'),
+                ...pools.map((p) => chipBtn(p, `${p} (${poolStats[p].count} · ${fmtUsd(poolStats[p].used)})`, poolFilter === p)),
+              ],
             }),
             shown.length
               ? jsxs('div', {
                   className: 'flex flex-col gap-1.5',
                   children: [
                     jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('keys.shownSummary', shown.length, list.length) }),
-                    ...shown.map((k) => jsx(KeyCard, { k, maxUsed }, k.id)),
+                    ...shown.map((k) => jsx(KeyCard, { k }, k.id)),
                   ],
                 })
               : jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('keys.noMatch') }),
