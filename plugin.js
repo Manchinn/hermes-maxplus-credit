@@ -29,7 +29,7 @@ import {
   useValue,
   usePluginI18n,
 } from '@hermes/plugin-sdk'
-import { useState } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ID = 'maxplus-credit'
@@ -37,6 +37,8 @@ const API = 'https://api.maxplus-ai.cc'
 const AUTH = 'Bear' + 'er'
 const KEY_RE = /^ccsk-[a-f0-9]{64}$/
 const MGMT_RE = /^ccmk-\S{8,}$/
+const JEV_OFFICIAL_URL = 'https://api.typesafe.ai/v1/systemone'
+const JEV_9ROUTER_URL = 'http://localhost:20128/v1/systemone'
 
 /* ─── i18n message bundles ──────────────────────────────── */
 
@@ -141,6 +143,44 @@ const MESSAGES_EN = {
     refreshLabel: 'MaxPlus: Refresh Credit',
     clearLabel: 'MaxPlus: Clear Tokens',
     clearedMessage: 'Deleted MaxPlus tokens',
+  },
+  probe: {
+    title: 'Model Connection & Pool Inspector',
+    subtitle: 'Verify real model availability and latency per pool with tiny probes',
+    poolLabel: 'Target Pool',
+    customPoolPlaceholder: 'Channel name (e.g. nonono)',
+    keyLabel: 'API Key (ccsk)',
+    keyPlaceholder: 'ccsk-… (defaults to active key)',
+    jevModeLabel: 'Jev AI Assist',
+    jevOfficial: 'Official TypeSafe',
+    jev9router: '9Router Gateway',
+    jevDisabled: 'Heuristic Only',
+    jevTokenLabel: 'TypeSafe API Key',
+    jevTokenPlaceholder: 'TypeSafe API key for Jev…',
+    fetchModels: 'Fetch Models',
+    fetchingModels: 'Fetching…',
+    probeAll: 'Probe All',
+    probingAll: 'Probing…',
+    stopProbe: 'Stop',
+    testSingle: 'Test',
+    testingSingle: '…',
+    statusOnline: 'Online',
+    statusFailed: 'Failed',
+    statusPending: 'Untested',
+    allStatuses: 'All Statuses',
+    allCategories: 'All Categories',
+    catReasoning: 'Reasoning',
+    catCoding: 'Coding',
+    catVision: 'Vision',
+    catGeneral: 'General',
+    searchPlaceholder: 'Search model id…',
+    noModels: 'No models found in this pool',
+    noMatch: 'No models match filter',
+    summaryText: (online, total, avgMs) => `${online}/${total} models online · Avg ${avgMs}ms`,
+    needTokenOrKey: 'Please enter a valid ccsk- key to probe models on this pool',
+    checkpointLabel: 'checkpoint',
+    copyModelTooltip: 'Click to copy model ID',
+    copiedModel: (m) => `Copied model ID: ${m}`,
   },
   errors: {
     'no-token': 'Token not set',
@@ -258,6 +298,44 @@ const MESSAGES_TH = {
     refreshLabel: 'MaxPlus: รีเฟรชเครดิต',
     clearLabel: 'MaxPlus: ลบ tokens',
     clearedMessage: 'ลบ MaxPlus tokens แล้ว',
+  },
+  probe: {
+    title: 'ตรวจสอบการเชื่อมต่อ Model ใน Pool',
+    subtitle: 'ตรวจสถานะจริงและ Latency ของแต่ละโมเดลด้วย tiny probe',
+    poolLabel: 'Pool ที่ต้องการตรวจ',
+    customPoolPlaceholder: 'ชื่อ channel (เช่น nonono)',
+    keyLabel: 'API Key (ccsk)',
+    keyPlaceholder: 'ccsk-… (ค่าเริ่มต้นใช้คีย์หลัก)',
+    jevModeLabel: 'ตัวช่วย Jev AI',
+    jevOfficial: 'ทางการ (TypeSafe Official)',
+    jev9router: '9Router (Local Gateway)',
+    jevDisabled: 'ใช้กฎพื้นฐาน (Heuristic)',
+    jevTokenLabel: 'TypeSafe API Key',
+    jevTokenPlaceholder: 'ใส่ TypeSafe API key สำหรับ Jev…',
+    fetchModels: 'ดึงรายชื่อโมเดล',
+    fetchingModels: 'กำลังดึง…',
+    probeAll: 'ทดสอบทั้งหมด',
+    probingAll: 'กำลังทดสอบ…',
+    stopProbe: 'หยุด',
+    testSingle: 'ทดสอบ',
+    testingSingle: '…',
+    statusOnline: 'ใช้งานได้',
+    statusFailed: 'มีปัญหา',
+    statusPending: 'ยังไม่ตรวจ',
+    allStatuses: 'ทุกสถานะ',
+    allCategories: 'ทุกหมวด',
+    catReasoning: 'สายคิดวิเคราะห์ (Reasoning)',
+    catCoding: 'สายโค้ด (Coding)',
+    catVision: 'สายภาพ (Vision)',
+    catGeneral: 'แชททั่วไป (General)',
+    searchPlaceholder: 'ค้นหาชื่อโมเดล…',
+    noModels: 'ไม่พบโมเดลใน pool นี้',
+    noMatch: 'ไม่มีโมเดลที่ตรงกับตัวกรอง',
+    summaryText: (online, total, avgMs) => `ใช้งานได้ ${online}/${total} ตัว · Latency เฉลี่ย ${avgMs}ms`,
+    needTokenOrKey: 'โปรดระบุคีย์ ccsk- เพื่อทดสอบโมเดลใน pool นี้',
+    checkpointLabel: 'checkpoint จริง',
+    copyModelTooltip: 'กดเพื่อ copy ชื่อ model',
+    copiedModel: (m) => `copy model ID แล้ว: ${m}`,
   },
   errors: {
     'no-token': 'ยังไม่ได้ตั้ง token',
@@ -452,6 +530,162 @@ function SpendBar({ ratio }) {
   })
 }
 
+function baseFor(pool) {
+  const p = String(pool || 'auto').trim()
+  if (p === 'native' || p === 'v1' || !p || p === 'auto') return `${API}/v1`
+  return `${API}/${p}/v1`
+}
+
+function isReasoningModel(id) {
+  if (!id || typeof id !== 'string') return false
+  const s = id.toLowerCase()
+  return /r1|reason|think|deepseek-v4\.1|o1|o3|opus-4\.[6-8]-thinking/.test(s)
+}
+
+function classifyModelCategory(id) {
+  if (!id || typeof id !== 'string') return 'general'
+  const s = id.toLowerCase()
+  if (isReasoningModel(s)) return 'reasoning'
+  if (/code|coder|dev|swe|program/.test(s)) return 'coding'
+  if (/vision|vl|omni|image|multimodal/.test(s)) return 'vision'
+  return 'general'
+}
+
+function buildProbePayload(modelId, isReasoning) {
+  return {
+    model: modelId,
+    messages: [{ role: 'user', content: 'ping' }],
+    max_tokens: isReasoning ? 80 : 8,
+  }
+}
+
+function parseProbeResponse(status, json, durationMs) {
+  const ok = status === 200
+  let errorMsg = null
+  let checkpoint = null
+  if (json) {
+    if (json.model) checkpoint = String(json.model)
+    if (json.error) {
+      errorMsg = typeof json.error === 'string' ? json.error : (json.error.message || JSON.stringify(json.error))
+    }
+  }
+  return {
+    status,
+    ok,
+    latencyMs: Math.max(0, Math.round(durationMs || 0)),
+    checkpoint,
+    error: errorMsg,
+  }
+}
+
+async function classifyWithJev({ provider, token, modelId, endpointOverride }) {
+  const fallback = {
+    isReasoning: isReasoningModel(modelId),
+    category: classifyModelCategory(modelId),
+    source: 'heuristic',
+  }
+  if (!provider || provider === 'disabled') {
+    return fallback
+  }
+
+  const endpoint = endpointOverride || (provider === 'official' ? JEV_OFFICIAL_URL : JEV_9ROUTER_URL)
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `${AUTH} ${token}`
+
+  const model = provider === 'official' ? 'jev-latest' : 'ocz/jev-1.13-free'
+  const body = JSON.stringify({
+    model,
+    state: `Model ID is ${modelId}. Classify its capabilities for probe testing.`,
+    questions: {
+      is_reasoning: {
+        type: 'noul',
+        instructions: 'Is this model a reasoning, chain-of-thought, or thinking model that requires a larger completion token budget?',
+      },
+      category: {
+        type: 'choice',
+        criteria: {
+          reasoning: 'Reasoning or thinking model',
+          coding: 'Dedicated code generation or engineering model',
+          vision: 'Vision or multimodal model',
+          general: 'General conversation or standard instruction chat',
+        },
+      },
+    },
+  })
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 6000)
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body,
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+    if (!res.ok) return fallback
+    const data = await res.json()
+    const answers = data && data.answers
+    if (!answers) return fallback
+
+    const noulVal = answers.is_reasoning?.noul ?? answers.is_reasoning?.probability ?? 0
+    const catChoice = answers.category?.choice || fallback.category
+
+    return {
+      isReasoning: noulVal >= 0.5 || isReasoningModel(modelId),
+      category: catChoice,
+      source: `jev-${provider}`,
+    }
+  } catch {
+    return fallback
+  }
+}
+
+async function probeModel({ baseUrl, token, modelId, isReasoning, timeoutMs = 15000, signal }) {
+  const url = `${baseUrl}/chat/completions`
+  const payload = buildProbePayload(modelId, isReasoning)
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `${AUTH} ${token}`,
+  }
+
+  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  const onAbort = () => controller.abort()
+  if (signal) signal.addEventListener('abort', onAbort)
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+    if (signal) signal.removeEventListener('abort', onAbort)
+    const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
+    let json = null
+    try {
+      json = await res.json()
+    } catch {}
+    return parseProbeResponse(res.status, json, t1 - t0)
+  } catch (err) {
+    clearTimeout(timer)
+    if (signal) signal.removeEventListener('abort', onAbort)
+    const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
+    const isTimeout = err.name === 'AbortError'
+    return {
+      status: isTimeout ? 504 : 0,
+      ok: false,
+      latencyMs: Math.max(0, Math.round(t1 - t0)),
+      checkpoint: null,
+      error: isTimeout ? 'Timeout (>15s)' : 'Network / Connection error',
+    }
+  }
+}
+
 export default {
   id: ID,
   name: 'MaxPlus Credit',
@@ -462,6 +696,9 @@ export default {
     const $token = atom(ctx.storage.get('token', ''))
     const $mgmt = atom(ctx.storage.get('mgmt', ''))
     const $lang = atom(ctx.storage.get('lang', 'auto'))
+    const $jevProvider = atom(ctx.storage.get('jev_provider', 'official'))
+    const $jevToken = atom(ctx.storage.get('typesafe_key', ''))
+    const $probePool = atom(ctx.storage.get('probe_pool', 'native'))
 
     try { ctx.storage.remove('baseline') } catch {}
 
@@ -525,10 +762,7 @@ export default {
     const fetchUsage = (period) => apiWith($token.get(), `/v1/usage?period=${period}`)
     const fetchKeys = () => apiWith($mgmt.get(), '/v1/api-keys')
 
-    function baseFor(pool) {
-      const p = String(pool || 'auto')
-      return p === 'native' ? `${API}/v1` : `${API}/${p}/v1`
-    }
+    // baseFor is now defined in top-level helpers
 
     function useMeQuery() {
       const token = useValue($token)
@@ -1012,8 +1246,509 @@ export default {
       })
     }
 
+    function ModelProbeSection({ keysList }) {
+      const tr = useT()
+      const token = useValue($token)
+      const jevToken = useValue($jevToken)
+      const jevProvider = useValue($jevProvider)
+      const storedPool = useValue($probePool)
+
+      const [poolInput, setPoolInput] = useState('')
+      const [selectedPool, setSelectedPool] = useState(storedPool || 'native')
+      const [overrideKey, setOverrideKey] = useState('')
+      const [models, setModels] = useState([])
+      const [loadingModels, setLoadingModels] = useState(false)
+      const [probingAll, setProbingAll] = useState(false)
+      const [probeResults, setProbeResults] = useState({})
+      const [filterStatus, setFilterStatus] = useState('all')
+      const [filterCategory, setFilterCategory] = useState('all')
+      const [searchQuery, setSearchQuery] = useState('')
+      const abortRef = useRef(null)
+
+      const effectivePool = poolInput.trim() || selectedPool
+      const effectiveBaseUrl = baseFor(effectivePool)
+
+      const matchedKey = useMemo(() => {
+        if (overrideKey.trim()) return overrideKey.trim()
+        if (keysList && keysList.length) {
+          const match = keysList.find((k) => String(k.pool || 'auto') === effectivePool)
+          if (match && match.key) return match.key
+        }
+        return token || ''
+      }, [overrideKey, keysList, effectivePool, token])
+
+      const detectedPools = useMemo(() => {
+        const defaultList = ['native', 'nonono', 'chinese-specials', 'deepseek-officials', 'event-pools']
+        if (!keysList || !keysList.length) return defaultList
+        const s = new Set(defaultList)
+        keysList.forEach((k) => {
+          if (k.pool) s.add(String(k.pool))
+        })
+        return Array.from(s)
+      }, [keysList])
+
+      const setPoolChoice = (p) => {
+        haptic('tap')
+        setSelectedPool(p)
+        setPoolInput('')
+        setStored($probePool, 'probe_pool', p)
+      }
+
+      const setJevChoice = (prov) => {
+        haptic('tap')
+        setStored($jevProvider, 'jev_provider', prov)
+      }
+
+      const fetchCatalog = async () => {
+        if (!matchedKey) {
+          host.notify({ kind: 'info', message: tr('probe.needTokenOrKey') })
+          return
+        }
+        setLoadingModels(true)
+        haptic('tap')
+        try {
+          const res = await fetch(`${effectiveBaseUrl}/models`, {
+            headers: { Authorization: `${AUTH} ${matchedKey}` },
+          })
+          if (!res.ok) throw new Error(`http-${res.status}`)
+          const data = await res.json()
+          const list = (data && data.data && Array.isArray(data.data))
+            ? data.data.map((m) => (typeof m === 'string' ? m : m.id)).filter(Boolean)
+            : []
+          setModels(list)
+          const initialMap = {}
+          list.forEach((m) => {
+            initialMap[m] = {
+              status: null,
+              ok: null,
+              latencyMs: null,
+              checkpoint: null,
+              error: null,
+              category: classifyModelCategory(m),
+              isReasoning: isReasoningModel(m),
+              source: 'pending',
+              probing: false,
+            }
+          })
+          setProbeResults(initialMap)
+          host.notify({ kind: 'info', message: `Found ${list.length} models in pool ${effectivePool}` })
+        } catch (err) {
+          host.notify({ kind: 'info', message: `Fetch models failed: ${err.message}` })
+        } finally {
+          setLoadingModels(false)
+        }
+      }
+
+      const runProbe = async (modelId) => {
+        if (!matchedKey) {
+          host.notify({ kind: 'info', message: tr('probe.needTokenOrKey') })
+          return
+        }
+        setProbeResults((prev) => ({
+          ...prev,
+          [modelId]: { ...(prev[modelId] || {}), probing: true },
+        }))
+
+        let isReasoning = isReasoningModel(modelId)
+        let category = classifyModelCategory(modelId)
+        let source = 'heuristic'
+
+        if (jevProvider !== 'disabled') {
+          try {
+            const jRes = await classifyWithJev({
+              provider: jevProvider,
+              token: jevProvider === 'official' ? (jevToken || '') : '',
+              modelId,
+            })
+            isReasoning = jRes.isReasoning
+            category = jRes.category
+            source = jRes.source
+          } catch {}
+        }
+
+        const res = await probeModel({
+          baseUrl: effectiveBaseUrl,
+          token: matchedKey,
+          modelId,
+          isReasoning,
+          timeoutMs: 15000,
+        })
+
+        setProbeResults((prev) => ({
+          ...prev,
+          [modelId]: {
+            ...res,
+            category,
+            isReasoning,
+            source,
+            probing: false,
+          },
+        }))
+      }
+
+      const runProbeAll = async () => {
+        if (!models.length) return
+        if (!matchedKey) {
+          host.notify({ kind: 'info', message: tr('probe.needTokenOrKey') })
+          return
+        }
+        setProbingAll(true)
+        haptic('tap')
+        const ctrl = new AbortController()
+        abortRef.current = ctrl
+
+        const chunk = 3
+        for (let i = 0; i < models.length; i += chunk) {
+          if (ctrl.signal.aborted) break
+          const batch = models.slice(i, i + chunk)
+          await Promise.all(batch.map((m) => runProbe(m)))
+        }
+        setProbingAll(false)
+      }
+
+      const stopProbe = () => {
+        haptic('tap')
+        if (abortRef.current) {
+          abortRef.current.abort()
+          abortRef.current = null
+        }
+        setProbingAll(false)
+      }
+
+      const copyModelId = async (m) => {
+        const ok = await ctx.os.writeClipboard(m)
+        host.notify({ kind: 'info', message: ok ? tr('probe.copiedModel', m) : tr('common.copyFailed') })
+      }
+
+      const probedList = Object.entries(probeResults)
+      const totalCount = models.length
+      const onlineCount = probedList.filter(([, r]) => r && r.ok === true).length
+      const failedCount = probedList.filter(([, r]) => r && r.status !== null && r.ok === false).length
+      const latencies = probedList
+        .filter(([, r]) => r && r.ok === true && typeof r.latencyMs === 'number')
+        .map(([, r]) => r.latencyMs)
+      const avgLatency = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : 0
+
+      const needle = searchQuery.trim().toLowerCase()
+      const filteredModels = models.filter((m) => {
+        if (needle && !m.toLowerCase().includes(needle)) return false
+        const r = probeResults[m]
+        if (filterStatus === 'online' && (!r || !r.ok)) return false
+        if (filterStatus === 'failed' && (!r || r.status === null || r.ok)) return false
+        if (filterStatus === 'untested' && r && r.status !== null) return false
+        const cat = (r && r.category) || classifyModelCategory(m)
+        if (filterCategory !== 'all' && cat !== filterCategory) return false
+        return true
+      })
+
+      const poolBtn = (p) => jsx('button', {
+        type: 'button',
+        onClick: () => setPoolChoice(p),
+        style: effectivePool === p ? { borderColor: 'var(--ui-accent)', fontWeight: 600 } : null,
+        className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
+        children: p,
+      })
+
+      const jevBtn = (id, label) => jsx('button', {
+        type: 'button',
+        onClick: () => setJevChoice(id),
+        style: jevProvider === id ? { borderColor: 'var(--ui-accent)', fontWeight: 600 } : null,
+        className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
+        children: label,
+      })
+
+      const filterBtn = (id, label, active, onClick) => jsx('button', {
+        type: 'button',
+        onClick,
+        style: active ? { borderColor: 'var(--ui-accent)', fontWeight: 600 } : null,
+        className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
+        children: label,
+      })
+
+      return jsx(Section, {
+        title: tr('probe.title'),
+        right: totalCount > 0
+          ? jsx('div', {
+              className: 'font-mono text-xs text-(--ui-text-tertiary)',
+              children: tr('probe.summaryText', onlineCount, totalCount, avgLatency),
+            })
+          : jsx('div', {
+              className: 'text-xs text-(--ui-text-tertiary)',
+              children: tr('probe.subtitle'),
+            }),
+        children: jsxs('div', {
+          className: 'flex flex-col gap-2',
+          children: [
+            jsxs('div', {
+              className: 'flex flex-col gap-2 rounded-sm border border-(--ui-stroke-secondary) p-2',
+              children: [
+                jsxs('div', {
+                  className: 'flex flex-col gap-1',
+                  children: [
+                    jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('probe.poolLabel') }),
+                    jsxs('div', {
+                      className: 'flex items-center gap-1 overflow-x-auto pb-0.5',
+                      children: [
+                        ...detectedPools.map((p) => poolBtn(p)),
+                        jsx('input', {
+                          value: poolInput,
+                          placeholder: tr('probe.customPoolPlaceholder'),
+                          onChange: (e) => setPoolInput(e.target.value),
+                          className: 'min-w-[140px] flex-1 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-0.5 font-mono text-xs',
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                jsxs('div', {
+                  className: 'flex flex-wrap items-center justify-between gap-2 border-t border-(--ui-stroke-secondary) pt-2',
+                  children: [
+                    jsxs('div', {
+                      className: 'flex flex-wrap items-center gap-1.5',
+                      children: [
+                        jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('probe.jevModeLabel') }),
+                        jevBtn('official', tr('probe.jevOfficial')),
+                        jevBtn('9router', tr('probe.jev9router')),
+                        jevBtn('disabled', tr('probe.jevDisabled')),
+                      ],
+                    }),
+                    jsxs('div', {
+                      className: 'flex items-center gap-1.5',
+                      children: [
+                        jsx('button', {
+                          type: 'button',
+                          disabled: loadingModels || probingAll,
+                          onClick: fetchCatalog,
+                          className: 'rounded-sm border border-(--ui-stroke-secondary) px-2.5 py-1 text-xs font-medium hover:bg-(--chrome-action-hover) disabled:opacity-50',
+                          children: loadingModels ? tr('probe.fetchingModels') : tr('probe.fetchModels'),
+                        }),
+                        models.length > 0
+                          ? jsx('button', {
+                              type: 'button',
+                              onClick: probingAll ? stopProbe : runProbeAll,
+                              className: `rounded-sm border px-2.5 py-1 text-xs font-medium ${
+                                probingAll
+                                  ? 'border-rose-500/50 bg-rose-500/10 text-rose-300'
+                                  : 'border-blue-500/50 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20'
+                              }`,
+                              children: probingAll ? tr('probe.stopProbe') : tr('probe.probeAll'),
+                            })
+                          : null,
+                      ],
+                    }),
+                  ],
+                }),
+                jsxs('div', {
+                  className: 'flex items-center gap-2 pt-0.5',
+                  children: [
+                    jsx('span', { className: 'shrink-0 text-xs text-(--ui-text-tertiary)', children: tr('probe.keyLabel') }),
+                    jsx('input', {
+                      type: 'password',
+                      value: overrideKey,
+                      placeholder: tr('probe.keyPlaceholder'),
+                      onChange: (e) => setOverrideKey(e.target.value),
+                      className: 'min-w-0 flex-1 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-0.5 font-mono text-xs',
+                    }),
+                    jsx('span', {
+                      className: 'shrink-0 font-mono text-xs text-(--ui-text-tertiary)',
+                      children: matchedKey ? maskToken(matchedKey) : tr('common.none'),
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            models.length > 0
+              ? jsxs('div', {
+                  className: 'flex flex-col gap-2',
+                  children: [
+                    jsxs('div', {
+                      className: 'flex items-center gap-3 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs',
+                      children: [
+                        jsxs('span', {
+                          children: ['Total: ', jsx('strong', { children: totalCount })],
+                        }),
+                        jsxs('span', {
+                          className: 'text-emerald-400',
+                          children: ['Online: ', jsx('strong', { children: onlineCount })],
+                        }),
+                        jsxs('span', {
+                          className: failedCount > 0 ? 'text-rose-400' : 'text-(--ui-text-tertiary)',
+                          children: ['Failed: ', jsx('strong', { children: failedCount })],
+                        }),
+                        avgLatency > 0
+                          ? jsxs('span', {
+                              className: 'font-mono text-(--ui-text-tertiary)',
+                              children: ['Avg Latency: ', jsx('strong', { children: `${avgLatency}ms` })],
+                            })
+                          : null,
+                      ],
+                    }),
+                    jsxs('div', {
+                      className: 'flex flex-col gap-1.5',
+                      children: [
+                        jsx('input', {
+                          value: searchQuery,
+                          placeholder: tr('probe.searchPlaceholder'),
+                          onChange: (e) => setSearchQuery(e.target.value),
+                          className: 'min-w-0 flex-1 rounded-sm border border-(--ui-stroke-secondary) bg-transparent px-1.5 py-1 text-xs',
+                        }),
+                        jsxs('div', {
+                          className: 'flex items-center justify-between gap-2 overflow-x-auto pb-0.5',
+                          children: [
+                            jsxs('div', {
+                              className: 'flex gap-1',
+                              children: [
+                                filterBtn('all', tr('probe.allStatuses'), filterStatus === 'all', () => setFilterStatus('all')),
+                                filterBtn('online', `${tr('probe.statusOnline')} (${onlineCount})`, filterStatus === 'online', () => setFilterStatus('online')),
+                                filterBtn('failed', `${tr('probe.statusFailed')} (${failedCount})`, filterStatus === 'failed', () => setFilterStatus('failed')),
+                                filterBtn('untested', tr('probe.statusPending'), filterStatus === 'untested', () => setFilterStatus('untested')),
+                              ],
+                            }),
+                            jsxs('div', {
+                              className: 'flex gap-1',
+                              children: [
+                                filterBtn('all', tr('probe.allCategories'), filterCategory === 'all', () => setFilterCategory('all')),
+                                filterBtn('reasoning', tr('probe.catReasoning'), filterCategory === 'reasoning', () => setFilterCategory('reasoning')),
+                                filterBtn('coding', tr('probe.catCoding'), filterCategory === 'coding', () => setFilterCategory('coding')),
+                                filterBtn('vision', tr('probe.catVision'), filterCategory === 'vision', () => setFilterCategory('vision')),
+                                filterBtn('general', tr('probe.catGeneral'), filterCategory === 'general', () => setFilterCategory('general')),
+                              ],
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                    filteredModels.length > 0
+                      ? jsxs('div', {
+                          className: 'flex max-h-80 flex-col gap-1 overflow-y-auto pr-1',
+                          children: filteredModels.map((m) => {
+                            const r = probeResults[m] || {}
+                            const isProbing = r.probing
+                            const isOk = r.ok === true
+                            const isFail = r.status !== null && r.ok === false
+                            const cat = r.category || classifyModelCategory(m)
+
+                            let catColor = 'text-zinc-400 border-zinc-700 bg-zinc-800/40'
+                            if (cat === 'reasoning') catColor = 'text-purple-300 border-purple-500/30 bg-purple-500/10'
+                            else if (cat === 'coding') catColor = 'text-blue-300 border-blue-500/30 bg-blue-500/10'
+                            else if (cat === 'vision') catColor = 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10'
+
+                            let statusBadge = jsx('span', {
+                              className: 'rounded px-1.5 py-0.5 font-mono text-[0.6875rem] text-(--ui-text-tertiary)',
+                              children: '—',
+                            })
+                            if (isProbing) {
+                              statusBadge = jsx('span', {
+                                className: 'animate-pulse rounded bg-blue-500/20 px-1.5 py-0.5 font-mono text-[0.6875rem] text-blue-300',
+                                children: tr('probe.testingSingle'),
+                              })
+                            } else if (isOk) {
+                              statusBadge = jsxs('div', {
+                                className: 'flex items-center gap-1.5',
+                                children: [
+                                  jsx('span', {
+                                    className: 'font-mono text-xs text-emerald-400 tabular-nums',
+                                    children: `${r.latencyMs}ms`,
+                                  }),
+                                  jsx('span', {
+                                    className: 'rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[0.6875rem] text-emerald-300',
+                                    children: '200 OK',
+                                  }),
+                                ],
+                              })
+                            } else if (isFail) {
+                              statusBadge = jsxs('div', {
+                                className: 'flex items-center gap-1.5',
+                                children: [
+                                  r.latencyMs != null
+                                    ? jsx('span', {
+                                        className: 'font-mono text-xs text-(--ui-text-tertiary) tabular-nums',
+                                        children: `${r.latencyMs}ms`,
+                                      })
+                                    : null,
+                                  jsx('span', {
+                                    className: 'rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 font-mono text-[0.6875rem] text-rose-300',
+                                    children: r.status ? `HTTP ${r.status}` : 'ERR',
+                                  }),
+                                ],
+                              })
+                            }
+
+                            return jsxs('div', {
+                              className: 'flex items-center justify-between gap-2 rounded-sm border border-(--ui-stroke-secondary) p-1.5 hover:bg-(--chrome-action-hover)',
+                              children: [
+                                jsxs('div', {
+                                  className: 'flex min-w-0 flex-col gap-0.5',
+                                  children: [
+                                    jsxs('div', {
+                                      className: 'flex items-center gap-1.5',
+                                      children: [
+                                        jsx('button', {
+                                          type: 'button',
+                                          title: tr('probe.copyModelTooltip'),
+                                          onClick: () => copyModelId(m),
+                                          className: 'truncate font-mono text-xs font-medium text-foreground hover:underline',
+                                          children: m,
+                                        }),
+                                        jsx('span', {
+                                          className: `shrink-0 rounded border px-1 py-0.2 text-[0.625rem] ${catColor}`,
+                                          children: cat,
+                                        }),
+                                        r.source && r.source.startsWith('jev')
+                                          ? jsx('span', {
+                                              className: 'rounded bg-amber-500/10 px-1 text-[0.625rem] text-amber-300',
+                                              children: '⚡jev',
+                                            })
+                                          : null,
+                                      ],
+                                    }),
+                                    r.checkpoint && r.checkpoint !== m
+                                      ? jsx('div', {
+                                          className: 'truncate font-mono text-[0.6875rem] text-(--ui-text-tertiary)',
+                                          children: `↳ ${tr('probe.checkpointLabel')}: ${r.checkpoint}`,
+                                        })
+                                      : null,
+                                    r.error
+                                      ? jsx('div', {
+                                          className: 'truncate text-[0.6875rem] text-rose-400',
+                                          children: r.error,
+                                        })
+                                      : null,
+                                  ],
+                                }),
+                                jsxs('div', {
+                                  className: 'flex shrink-0 items-center gap-2',
+                                  children: [
+                                    statusBadge,
+                                    jsx('button', {
+                                      type: 'button',
+                                      disabled: isProbing || probingAll,
+                                      onClick: () => runProbe(m),
+                                      className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover) disabled:opacity-50',
+                                      children: tr('probe.testSingle'),
+                                    }),
+                                  ],
+                                }),
+                              ],
+                            }, m)
+                          }),
+                        })
+                      : jsx('div', {
+                          className: 'p-3 text-center text-xs text-(--ui-text-tertiary)',
+                          children: tr('probe.noMatch'),
+                        }),
+                  ],
+                })
+              : null,
+          ],
+        }),
+      })
+    }
+
     function StatusPage() {
       const [usagePeriod, setUsagePeriod] = useState('1d')
+      const keysQ = useKeysQuery()
+      const keysList = pickKeyList(keysQ.data)
       const tr = useT()
       const refresh = () => {
         queryClient.invalidateQueries({ queryKey: [ID] })
@@ -1073,6 +1808,7 @@ export default {
             }),
           }),
           jsx(KeysSection, {}),
+          jsx(ModelProbeSection, { keysList }),
           jsx(Section, {
             title: tr('token.title'),
             children: jsxs('div', {
@@ -1093,6 +1829,14 @@ export default {
                   placeholder: 'ccmk-…',
                   pattern: MGMT_RE,
                   hint: tr('token.mgmtHint'),
+                }),
+                jsx(TokenField, {
+                  $a: $jevToken,
+                  storeKey: 'typesafe_key',
+                  label: tr('probe.jevTokenLabel'),
+                  placeholder: tr('probe.jevTokenPlaceholder'),
+                  pattern: /.+/,
+                  hint: 'TypeSafe System One API Key',
                 }),
               ],
             }),
@@ -1122,6 +1866,16 @@ export default {
     })
 
     ctx.registerMany([
+      {
+        id: 'probe',
+        area: PALETTE_AREA,
+        data: {
+          id: 'maxplus.probe',
+          label: 'MaxPlus: Probe Models',
+          keywords: ['maxplus', 'probe', 'models', 'connection', 'ping', 'เช็คโมเดล'],
+          run: () => host.navigate('/maxplus'),
+        },
+      },
       {
         id: 'open',
         area: PALETTE_AREA,
