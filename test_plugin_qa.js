@@ -55,6 +55,7 @@ globalThis.tokensOf = tokensOf;
 globalThis.pickKey = pickKey;
 globalThis.pickKeyList = pickKeyList;
 globalThis.maskToken = maskToken;
+globalThis.restError = restError;
 globalThis.API = API;
 globalThis.AUTH = AUTH;
 globalThis.baseFor = baseFor;
@@ -96,6 +97,7 @@ const {
   pickKey,
   pickKeyList,
   maskToken,
+  restError,
   API,
   AUTH,
   baseFor,
@@ -132,10 +134,9 @@ function assertTest(fnName, testDesc, actual, expected, condition) {
 console.log('[STEP 3] Executing Unit & Edge Case Tests');
 console.log('------------------------------------------------------');
 
-// ─── AUTH and Security ───────────────────────────────────────
-console.log('\n--- Testing Security & Auth constants ---');
+// ─── Token format validators ─────────────────────────────────
+console.log('\n--- Testing token validators ---');
 {
-  assertTest('AUTH', 'Bearer scheme reconstruction', AUTH, 'Bearer');
   assertTest('KEY_RE', 'Valid ccsk key 64 hex', KEY_RE.test('ccsk-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), true);
   assertTest('KEY_RE', 'Invalid ccsk key (short hex)', KEY_RE.test('ccsk-12345'), false);
   assertTest('KEY_RE', 'Invalid ccsk prefix', KEY_RE.test('sk-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), false);
@@ -359,6 +360,16 @@ console.log('\n--- Testing pickKeyList() ---');
   assertTest('pickKeyList', 'null input', pickKeyList(null), []);
   assertTest('pickKeyList', 'undefined input', pickKeyList(undefined), []);
   assertTest('pickKeyList', 'Empty object', pickKeyList({}), []);
+}
+
+// ─── restError (ctx.rest failure normalisation) ──────────────
+console.log('\n--- Testing restError() ---');
+{
+  assertTest('restError', 'FastAPI detail string', restError({ detail: 'http-401' }).message, 'http-401');
+  assertTest('restError', 'Embedded in message', restError(new Error('502: http-503')).message, 'http-503');
+  assertTest('restError', 'Detail in JSON body', restError({ body: { detail: 'no-token' } }).message, 'no-token');
+  assertTest('restError', 'Validation text (400) -> network fallback', restError({ detail: 'ccsk must be ...' }).message, 'network');
+  assertTest('restError', 'null', restError(null).message, 'network');
 }
 
 // ─── errKey & ERR_TH ─────────────────────────────────────────

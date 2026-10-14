@@ -9,7 +9,9 @@
  *   token slots (ccsk + ccmk) — read-only
  * - palette: open status / refresh / clear tokens
  *
- * Tokens live in ctx.storage only.
+ * Tokens live in the plugin's Python backend (config.json); the renderer only
+ * sees masked values and reaches MaxPlus through ctx.rest. Tokens left in
+ * ctx.storage by v1.0 are migrated once via POST /tokens, then removed.
  * Spec-compliant ctx.i18n.register({ en, th }) + internal language toggle (auto/en/th).
  */
 
@@ -37,6 +39,15 @@ const API = 'https://api.maxplus-ai.cc'
 const AUTH = 'Bear' + 'er'
 const KEY_RE = /^ccsk-[a-f0-9]{64}$/
 const MGMT_RE = /^ccmk-\S{8,}$/
+const REST_ERR_RE = /no-token|network|http-\d{3}/
+
+// ctx.rest failures carry the FastAPI detail (an error key like http-401);
+// normalise to Error(key) so errKey()/getErrorMessage keep working.
+function restError(e) {
+  const part = (v) => (typeof v === 'string' ? v : v ? JSON.stringify(v) : '')
+  const m = [e && e.detail, e && e.message, e && e.body].map(part).join(' ').match(REST_ERR_RE)
+  return new Error(m ? m[0] : 'network')
+}
 const JEV_OFFICIAL_URL = 'https://api.typesafe.ai/v1/systemone'
 const JEV_9ROUTER_URL = 'http://localhost:20128/v1/systemone'
 
@@ -693,8 +704,9 @@ export default {
   register(ctx) {
     ctx.i18n.register({ en: MESSAGES_EN, th: MESSAGES_TH })
 
-    const $token = atom(ctx.storage.get('token', ''))
-    const $mgmt = atom(ctx.storage.get('mgmt', ''))
+    // Atoms hold the *masked* token from the backend ('' = not set).
+    const $token = atom('')
+    const $mgmt = atom('')
     const $lang = atom(ctx.storage.get('lang', 'auto'))
     const $jevProvider = atom(ctx.storage.get('jev_provider', 'official'))
     const $jevToken = atom(ctx.storage.get('typesafe_key', ''))
@@ -702,11 +714,62 @@ export default {
 
     try { ctx.storage.remove('baseline') } catch {}
 
-    function setStored($a, storeKey, t) {
-      if (t) ctx.storage.set(storeKey, t)
-      else ctx.storage.remove(storeKey)
-      $a.set(t)
+    // Manual refresh must bypass the backend's 60s cache once.
+    let bypassCache = false
+
+    async function rest(path, body) {
+      try {
+        if (body !== undefined) return await ctx.rest(path, { method: 'POST', body })
+        const fresh = bypassCache && path !== '/config'
+        return await ctx.rest(fresh ? `${path}${path.includes('?') ? '&' : '?'}fresh=true` : path)
+      } catch (e) {
+        throw restError(e)
+      }
     }
+
+    function refreshAll() {
+      bypassCache = true
+      queryClient.invalidateQueries({ queryKey: [ID] })
+      setTimeout(() => { bypassCache = false }, 1500)
+    }
+
+    function applyConfig(cfg) {
+      $token.set((cfg && cfg.ccsk) || '')
+      $mgmt.set((cfg && cfg.ccmk) || '')
+    }
+
+    // slot: 'ccsk' | 'ccmk'. value '' clears. Rejects on backend failure.
+    async function saveTokens(patch) {
+      const cfg = await rest('/tokens', patch)
+      applyConfig(cfg)
+      queryClient.invalidateQueries({ queryKey: [ID] })
+    }
+
+    // One-time: push v1.0 browser-side tokens to the backend, then drop them.
+    async function loadConfigAndMigrate() {
+      try {
+        const legacy = { ccsk: ctx.storage.get('token', ''), ccmk: ctx.storage.get('mgmt', '') }
+        const patch = {}
+        if (KEY_RE.test(legacy.ccsk)) patch.ccsk = legacy.ccsk
+        if (MGMT_RE.test(legacy.ccmk)) patch.ccmk = legacy.ccmk
+        const cfg = await rest('/config')
+        if (Object.keys(patch).length) {
+          // Never overwrite a token the backend already has.
+          if (cfg.hasCcsk) delete patch.ccsk
+          if (cfg.hasCcmk) delete patch.ccmk
+        }
+        if (Object.keys(patch).length) {
+          applyConfig(await rest('/tokens', patch))
+        } else {
+          applyConfig(cfg)
+        }
+        ctx.storage.remove('token')
+        ctx.storage.remove('mgmt')
+      } catch {
+        // Backend not ready: leave legacy storage untouched and retry next load.
+      }
+    }
+    loadConfigAndMigrate()
 
     function setLang(l) {
       if (l && l !== 'auto') ctx.storage.set('lang', l)
@@ -744,23 +807,11 @@ export default {
       return translator(`errors.${k}`) || translator('common.unavailable')
     }
 
-    async function apiWith(token, path) {
-      if (!token) throw new Error('no-token')
-      let res
-      try {
-        res = await fetch(`${API}${path}`, {
-          headers: { Authorization: `${AUTH} ${token}` },
-        })
-      } catch {
-        throw new Error('network')
-      }
-      if (!res.ok) throw new Error(`http-${res.status}`)
-      return res.json()
-    }
-
-    const fetchMe = () => apiWith($token.get(), '/v1/me')
-    const fetchUsage = (period) => apiWith($token.get(), `/v1/usage?period=${period}`)
-    const fetchKeys = () => apiWith($mgmt.get(), '/v1/api-keys')
+    // Same payload shapes as the MaxPlus API, so the render helpers are unchanged.
+    const fetchMe = () => rest('/me')
+    const fetchUsage = (period) => rest(`/usage?period=${encodeURIComponent(period)}`).then((r) => r.raw)
+    const fetchKeys = () => rest('/keys')
+    const fetchKeyUsage = (kid) => rest(`/keys/${encodeURIComponent(kid)}/usage`).then((r) => r.usage)
 
     // baseFor is now defined in top-level helpers
 
@@ -853,7 +904,7 @@ export default {
 
       const refresh = () => {
         haptic('tap')
-        queryClient.invalidateQueries({ queryKey: [ID] })
+        refreshAll()
       }
       const openFull = () => {
         haptic('tap')
@@ -1000,25 +1051,36 @@ export default {
       })
     }
 
-    function TokenField({ $a, storeKey, label, placeholder, pattern, hint }) {
+    function TokenField({ slot, label, placeholder, pattern, hint }) {
+      const $a = slot === 'ccsk' ? $token : $mgmt
       const cur = useValue($a)
       const [draft, setDraft] = useState('')
+      const [busy, setBusy] = useState(false)
       const tr = useT()
+      const commit = async (value, doneMsg) => {
+        setBusy(true)
+        try {
+          await saveTokens({ [slot]: value })
+          setDraft('')
+          host.notify({ kind: 'info', message: doneMsg })
+        } catch (e) {
+          host.notify({ kind: 'info', message: getErrorMessage(e, tr) })
+        } finally {
+          setBusy(false)
+        }
+      }
       const save = () => {
         const str = draft.trim()
         if (str && !pattern.test(str)) {
           host.notify({ kind: 'info', message: tr('token.formatError', hint) })
           return
         }
-        setStored($a, storeKey, str)
-        setDraft('')
-        queryClient.invalidateQueries({ queryKey: [ID] })
-        host.notify({ kind: 'info', message: str ? tr('token.saved', label) : tr('token.deleted', label) })
+        commit(str, str ? tr('token.saved', label) : tr('token.deleted', label))
       }
       return jsxs('div', {
         className: 'flex flex-col gap-1.5',
         children: [
-          jsx(Row, { label, value: cur ? maskToken(cur) : tr('common.none') }),
+          jsx(Row, { label, value: cur || tr('common.none') }),
           jsxs('div', {
             className: 'flex gap-1.5',
             children: [
@@ -1037,18 +1099,15 @@ export default {
               jsx('button', {
                 type: 'button',
                 onClick: save,
+                disabled: busy,
                 className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
                 children: cur ? tr('common.change') : tr('common.save'),
               }),
               cur
                 ? jsx('button', {
                     type: 'button',
-                    onClick: () => {
-                      setStored($a, storeKey, '')
-                      setDraft('')
-                      queryClient.invalidateQueries({ queryKey: [ID] })
-                      host.notify({ kind: 'info', message: tr('token.deleted', label) })
-                    },
+                    disabled: busy,
+                    onClick: () => commit('', tr('token.deleted', label)),
                     className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
                     children: tr('common.delete'),
                   })
@@ -1248,7 +1307,6 @@ export default {
 
     function ModelProbeSection({ keysList }) {
       const tr = useT()
-      const token = useValue($token)
       const jevToken = useValue($jevToken)
       const jevProvider = useValue($jevProvider)
       const storedPool = useValue($probePool)
@@ -1274,8 +1332,10 @@ export default {
           const match = keysList.find((k) => String(k.pool || 'auto') === effectivePool)
           if (match && match.key) return match.key
         }
-        return token || ''
-      }, [overrideKey, keysList, effectivePool, token])
+        // The stored ccsk lives only in the backend (the renderer sees it masked),
+        // so it cannot authenticate a direct probe.
+        return ''
+      }, [overrideKey, keysList, effectivePool])
 
       const detectedPools = useMemo(() => {
         const defaultList = ['native', 'nonono', 'chinese-specials', 'deepseek-officials', 'event-pools']
@@ -1751,7 +1811,7 @@ export default {
       const keysList = pickKeyList(keysQ.data)
       const tr = useT()
       const refresh = () => {
-        queryClient.invalidateQueries({ queryKey: [ID] })
+        refreshAll()
         host.notify({ kind: 'info', message: tr('common.refreshed') })
       }
 
@@ -1815,16 +1875,14 @@ export default {
               className: 'flex flex-col gap-2',
               children: [
                 jsx(TokenField, {
-                  $a: $token,
-                  storeKey: 'token',
+                  slot: 'ccsk',
                   label: tr('token.inferenceLabel'),
                   placeholder: 'ccsk-…',
                   pattern: KEY_RE,
                   hint: tr('token.inferenceHint'),
                 }),
                 jsx(TokenField, {
-                  $a: $mgmt,
-                  storeKey: 'mgmt',
+                  slot: 'ccmk',
                   label: tr('token.mgmtLabel'),
                   placeholder: 'ccmk-…',
                   pattern: MGMT_RE,
@@ -1894,7 +1952,7 @@ export default {
           label: MESSAGES_EN.palette.refreshLabel,
           keywords: ['maxplus', 'refresh', 'รีเฟรช'],
           run: () => {
-            queryClient.invalidateQueries({ queryKey: [ID] })
+            refreshAll()
             host.notify({ kind: 'info', message: t('common.refreshed') })
           },
         },
@@ -1906,11 +1964,13 @@ export default {
           id: 'maxplus.clear',
           label: MESSAGES_EN.palette.clearLabel,
           keywords: ['maxplus', 'token', 'clear', 'ลบ'],
-          run: () => {
-            setStored($token, 'token', '')
-            setStored($mgmt, 'mgmt', '')
-            queryClient.invalidateQueries({ queryKey: [ID] })
-            host.notify({ kind: 'info', message: t('palette.clearedMessage') })
+          run: async () => {
+            try {
+              await saveTokens({ ccsk: '', ccmk: '' })
+              host.notify({ kind: 'info', message: t('palette.clearedMessage') })
+            } catch (e) {
+              host.notify({ kind: 'info', message: getErrorMessage(e, t) })
+            }
           },
         },
       },

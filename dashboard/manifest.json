@@ -1,0 +1,12 @@
+{
+  "name": "maxplus-credit",
+  "label": "MaxPlus Credit",
+  "description": "MaxPlus credit balance, usage statistics & API keys dashboard",
+  "version": "1.1.0",
+  "api": "plugin_api.py",
+  "tab": {
+    "path": "/maxplus",
+    "position": "end",
+    "hidden": false
+  }
+}

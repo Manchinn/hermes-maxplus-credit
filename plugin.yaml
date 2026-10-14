@@ -1,11 +1,14 @@
 name: maxplus-credit
-version: "1.0.0"
-description: "MaxPlus credit balance, usage statistics & API keys dashboard for Hermes Desktop"
+version: 1.1.0
+description: "MaxPlus credit balance, usage statistics & API keys dashboard for Hermes Desktop, plus the `maxplus` agent tool (balance, usage, keys, test, status). Disclosure: talks only to api.maxplus-ai.cc using the ccsk/ccmk tokens you enter; tokens are stored in the plugin's own local config.json and are never returned in full."
 author: Manchinn
-homepage: https://github.com/Manchinn/hermes-maxplus-credit
 license: MIT
-capabilities:
-  provides_tools: []
-  provides_hooks: []
-  provides_middleware: []
-  requires_env: []
+manifest_version: 2
+api_version: 1
+homepage: https://github.com/Manchinn/hermes-maxplus-credit
+provides_tools:
+  - maxplus
+tags:
+  - desktop
+  - credit
+  - statusbar
