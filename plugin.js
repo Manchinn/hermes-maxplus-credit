@@ -18,9 +18,10 @@
 import {
   STATUSBAR_AREAS,
   PALETTE_AREA,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   ROUTES_AREA,
   SIDEBAR_NAV_AREA,
   host,
@@ -32,7 +33,7 @@ import {
   usePluginI18n,
 } from '@hermes/plugin-sdk'
 import { useState, useRef, useMemo } from 'react'
-import { jsx, jsxs } from 'react/jsx-runtime'
+import { Fragment, jsx, jsxs } from 'react/jsx-runtime'
 
 const ID = 'maxplus-credit'
 const API = 'https://api.maxplus-ai.cc'
@@ -894,7 +895,7 @@ export default {
       })
     }
 
-    function ChipPopup() {
+    function MaxPlusModalDialog({ onClose }) {
       const token = useValue($token)
       const me = useMeQuery()
       const [period, setPeriod] = useState('1d')
@@ -908,29 +909,46 @@ export default {
       }
       const openFull = () => {
         haptic('tap')
+        if (onClose) onClose()
         host.navigate('/maxplus')
       }
       const footer = jsxs('div', {
-        className: 'flex gap-1.5',
+        className: 'flex items-center justify-between gap-2 pt-2 border-t border-(--ui-stroke-secondary)',
         children: [
           jsx('button', {
             type: 'button',
             onClick: openFull,
-            className: 'flex-1 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
+            className: 'rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs font-medium hover:bg-(--chrome-action-hover) transition-colors',
             children: tr('common.openFull'),
           }),
-          jsx('button', {
-            type: 'button',
-            onClick: refresh,
-            className: 'shrink-0 rounded-sm border border-(--ui-stroke-secondary) px-2 py-1 text-xs hover:bg-(--chrome-action-hover)',
-            children: tr('common.refresh'),
+          jsxs('div', {
+            className: 'flex items-center gap-2',
+            children: [
+              jsx('button', {
+                type: 'button',
+                onClick: refresh,
+                className: 'rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs hover:bg-(--chrome-action-hover) transition-colors',
+                children: tr('common.refresh'),
+              }),
+              jsx('button', {
+                type: 'button',
+                onClick: onClose,
+                className: 'rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs hover:bg-(--chrome-action-hover) transition-colors',
+                children: isTh ? 'ปิด' : 'Close',
+              }),
+            ],
           }),
         ],
       })
+
       if (!token) {
         return jsxs('div', {
-          className: 'flex flex-col gap-1.5',
+          className: 'flex flex-col gap-3',
           children: [
+            jsx(DialogHeader, {
+              className: 'flex flex-row items-center justify-between gap-2 pr-6',
+              children: jsx(DialogTitle, { children: 'MaxPlus Credit' }),
+            }),
             jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('popup.needToken') }),
             footer,
           ],
@@ -938,8 +956,12 @@ export default {
       }
       if (me.isLoading) {
         return jsxs('div', {
-          className: 'flex flex-col gap-1.5',
+          className: 'flex flex-col gap-3',
           children: [
+            jsx(DialogHeader, {
+              className: 'flex flex-row items-center justify-between gap-2 pr-6',
+              children: jsx(DialogTitle, { children: 'MaxPlus Credit' }),
+            }),
             jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('popup.loading') }),
             footer,
           ],
@@ -947,9 +969,13 @@ export default {
       }
       if (me.error) {
         return jsxs('div', {
-          className: 'flex flex-col gap-1.5',
+          className: 'flex flex-col gap-3',
           children: [
-            jsx('div', { className: 'text-sm', children: getErrorMessage(me.error, tr) }),
+            jsx(DialogHeader, {
+              className: 'flex flex-row items-center justify-between gap-2 pr-6',
+              children: jsx(DialogTitle, { children: 'MaxPlus Credit' }),
+            }),
+            jsx('div', { className: 'text-sm text-rose-400', children: getErrorMessage(me.error, tr) }),
             footer,
           ],
         })
@@ -965,38 +991,66 @@ export default {
       ]
 
       return jsxs('div', {
-        style: { maxHeight: '60vh', overflowY: 'auto' },
-        className: 'flex flex-col gap-2',
+        className: 'flex flex-col gap-3',
         children: [
-          jsxs('div', {
-            className: 'flex flex-col gap-0.5',
+          jsxs(DialogHeader, {
+            className: 'flex flex-row items-center justify-between gap-2 pr-6',
             children: [
-              jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('popup.header', k.pool, k.active !== false) }),
+              jsx(DialogTitle, { children: 'MaxPlus Credit' }),
+              jsxs('div', {
+                className: 'flex items-center gap-1.5',
+                children: [
+                  jsx('span', {
+                    className: 'rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
+                    children: k.pool,
+                  }),
+                  jsx('span', {
+                    className: `rounded px-1.5 py-0.5 text-[0.6875rem] font-medium ${
+                      k.active !== false
+                        ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                        : 'border border-rose-500/30 bg-rose-500/10 text-rose-400'
+                    }`,
+                    children: k.active !== false ? (isTh ? 'เปิดใช้งาน' : 'Active') : (isTh ? 'ปิดอยู่' : 'Inactive'),
+                  }),
+                ],
+              }),
+            ],
+          }),
+          jsxs('div', {
+            className: 'flex flex-col gap-1 rounded-lg border border-(--ui-stroke-secondary) p-3 bg-(--ui-bg-elevated,transparent)',
+            children: [
+              jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('hero.title') }),
               jsx('div', {
-                style: { fontSize: 26, fontWeight: 650, lineHeight: 1.15 },
-                className: 'font-mono tabular-nums',
+                style: { fontSize: 28, fontWeight: 700, lineHeight: 1.15 },
+                className: 'font-mono tabular-nums text-foreground',
                 children: fmtUsd(bal),
               }),
-              freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: freeText }) : null,
+              freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary) pt-0.5', children: freeText }) : null,
               jsx(CapInfo, { k, tr }),
             ],
           }),
           jsxs('div', {
-            className: 'flex flex-col gap-1 border-t border-(--ui-stroke-secondary) pt-1.5',
+            className: 'flex flex-col gap-2 rounded-lg border border-(--ui-stroke-secondary) p-3',
             children: [
               jsxs('div', {
-                className: 'flex gap-1',
-                children: periodsList.map((p) => jsx('button', {
-                  type: 'button',
-                  onClick: () => {
-                    haptic('tap')
-                    setPeriod(p.id)
-                  },
-                  className: 'flex-1 rounded-sm border px-2 py-0.5 text-xs ' + (period === p.id
-                    ? 'border-(--ui-accent) text-foreground'
-                    : 'border-(--ui-stroke-secondary) text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)'),
-                  children: p.label,
-                }, p.id)),
+                className: 'flex items-center justify-between',
+                children: [
+                  jsx('span', { className: 'text-xs font-medium text-(--ui-text-secondary)', children: tr('usage.title') }),
+                  jsxs('div', {
+                    className: 'flex gap-1',
+                    children: periodsList.map((p) => jsx('button', {
+                      type: 'button',
+                      onClick: () => {
+                        haptic('tap')
+                        setPeriod(p.id)
+                      },
+                      className: 'rounded px-2 py-0.5 text-xs transition-colors ' + (period === p.id
+                        ? 'bg-(--ui-accent) text-white font-medium'
+                        : 'border border-(--ui-stroke-secondary) text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'),
+                      children: p.label,
+                    }, p.id)),
+                  }),
+                ],
               }),
               jsx(UsageBlock, { period, label: '' }),
             ],
@@ -1007,6 +1061,7 @@ export default {
     }
 
     function Chip() {
+      const [dialogOpen, setDialogOpen] = useState(false)
       const token = useValue($token)
       const mgmt = useValue($mgmt)
       const me = useMeQuery()
@@ -1025,27 +1080,28 @@ export default {
         else if (keys.isLoading) label = tr('chip.loading')
         else if (keys.error) label = tr('chip.error')
       }
-      return jsxs(Popover, {
+      return jsxs(Fragment, {
         children: [
-          jsx(PopoverTrigger, {
-            asChild: true,
-            children: jsx('button', {
-              type: 'button',
-              title: tr('chip.tooltip'),
-              className: 'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
-              onClick: () => {
-                haptic('tap')
-              },
-              children: label,
-            }),
+          jsx('button', {
+            type: 'button',
+            title: tr('chip.tooltip'),
+            className: 'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
+            onClick: () => {
+              haptic('tap')
+              setDialogOpen(true)
+            },
+            children: label,
           }),
-          jsx(PopoverContent, {
-            side: 'top',
-            align: 'end',
-            sideOffset: 8,
-            collisionPadding: 12,
-            className: 'z-[1000] w-72 p-3',
-            children: jsx(ChipPopup, {}),
+          jsx(Dialog, {
+            open: dialogOpen,
+            onOpenChange: setDialogOpen,
+            children: jsx(DialogContent, {
+              fitContent: true,
+              className: 'min-w-[28rem] sm:max-w-lg rounded-xl border-(--ui-accent)',
+              bodyClassName: 'gap-3 overflow-auto max-h-[80vh] p-4',
+              'data-context-menu-skip': '',
+              children: jsx(MaxPlusModalDialog, { onClose: () => setDialogOpen(false) }),
+            }),
           }),
         ],
       })
