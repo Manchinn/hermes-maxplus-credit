@@ -3,11 +3,12 @@
  *
  * Shows MaxPlus credit balance, usage statistics and API keys per pool (api.maxplus-ai.cc).
  *
- * - statusBar chip: credit balance (or key count), polls every 60s
- * - page /maxplus: hero balance + burn pace, account usage 1d/7d/30d,
- *   all-keys table (search / pool filter / sort by spend), per-key usage,
- *   token slots (ccsk + ccmk) — read-only
- * - palette: open status / refresh / clear tokens
+ * - statusBar chip: credit balance (or key count), polls every 60s, opens modal dialog
+ * - unified modal dialog: 3 tabs (overview, keys, settings)
+ *   · overview: balance hero ($), free credit line, cap info, account usage 1d/7d/30d
+ *   · keys: all-keys table (search, pool filters, key cards, copy base URL, cap progress)
+ *   · settings: token slots (ccsk + ccmk) and language switcher (EN/TH)
+ * - palette: open modal / refresh / clear tokens
  *
  * Tokens live in the plugin's Python backend (config.json); the renderer only
  * sees masked values and reaches MaxPlus through ctx.rest. Tokens left in
@@ -22,8 +23,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  ROUTES_AREA,
-  SIDEBAR_NAV_AREA,
   host,
   haptic,
   useQuery,
@@ -61,11 +60,15 @@ const MESSAGES_EN = {
   },
   popup: {
     header: (pool, active) => `Balance · pool ${pool} · ${active ? '✅ Active' : '❌ Inactive'}`,
-    needToken: 'Enter ccsk-… in MaxPlus page first — management token alone is enough for key table',
+    needToken: 'Enter ccsk-… in Settings tab — management token alone is enough for key table',
     loading: 'Fetching /v1/me…',
   },
+  tabs: {
+    overview: 'Overview',
+    keys: 'Keys',
+    settings: 'Settings',
+  },
   common: {
-    openFull: 'Open full page →',
     refresh: 'Refresh',
     refreshed: 'Refreshed MaxPlus',
     save: 'Save',
@@ -148,7 +151,7 @@ const MESSAGES_EN = {
     deleted: (label) => `Deleted ${label}`,
   },
   palette: {
-    openLabel: 'MaxPlus: Open Status Page',
+    openLabel: 'MaxPlus: Open Credit Overview',
     refreshLabel: 'MaxPlus: Refresh Credit',
     clearLabel: 'MaxPlus: Clear Tokens',
     clearedMessage: 'Deleted MaxPlus tokens',
@@ -178,11 +181,15 @@ const MESSAGES_TH = {
   },
   popup: {
     header: (pool, active) => `คงเหลือ · pool ${pool} · ${active ? '✅ เปิด' : '❌ ปิด'}`,
-    needToken: 'ใส่ ccsk-… ในหน้า MaxPlus ก่อน — มีแค่ management token ก็ดูตาราง key ได้',
+    needToken: 'ใส่ ccsk-… ในแท็บตั้งค่า — มีแค่ management token ก็ดูตาราง key ได้',
     loading: 'กำลังดึง /v1/me…',
   },
+  tabs: {
+    overview: 'ภาพรวม',
+    keys: 'คีย์ทั้งหมด',
+    settings: 'ตั้งค่า',
+  },
   common: {
-    openFull: 'เปิดหน้าเต็ม →',
     refresh: 'รีเฟรช',
     refreshed: 'รีเฟรช MaxPlus แล้ว',
     save: 'บันทึก',
@@ -265,7 +272,7 @@ const MESSAGES_TH = {
     deleted: (label) => `ลบ ${label} แล้ว`,
   },
   palette: {
-    openLabel: 'MaxPlus: เปิดหน้าสถานะ',
+    openLabel: 'MaxPlus: เปิดหน้าต่างเครดิต',
     refreshLabel: 'MaxPlus: รีเฟรชเครดิต',
     clearLabel: 'MaxPlus: ลบ tokens',
     clearedMessage: 'ลบ MaxPlus tokens แล้ว',
@@ -480,6 +487,7 @@ export default {
     const $token = atom('')
     const $mgmt = atom('')
     const $lang = atom(ctx.storage.get('lang', 'auto'))
+    const $dialogOpen = atom(false)
 
     try { ctx.storage.remove('baseline') } catch {}
 
@@ -663,218 +671,6 @@ export default {
       })
     }
 
-    function MaxPlusModalDialog({ onClose }) {
-      const token = useValue($token)
-      const me = useMeQuery()
-      const [period, setPeriod] = useState('1d')
-      const tr = useT()
-      const currentLang = useValue($lang)
-      const isTh = currentLang === 'th'
-
-      const refresh = () => {
-        haptic('tap')
-        refreshAll()
-      }
-      const openFull = () => {
-        haptic('tap')
-        if (onClose) onClose()
-        host.navigate('/maxplus')
-      }
-      const footer = jsxs('div', {
-        className: 'flex items-center justify-between gap-2 pt-2 border-t border-(--ui-stroke-secondary)',
-        children: [
-          jsx('button', {
-            type: 'button',
-            onClick: openFull,
-            className: 'rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs font-medium hover:bg-(--chrome-action-hover) transition-colors',
-            children: tr('common.openFull'),
-          }),
-          jsxs('div', {
-            className: 'flex items-center gap-2',
-            children: [
-              jsx('button', {
-                type: 'button',
-                onClick: refresh,
-                className: 'rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs hover:bg-(--chrome-action-hover) transition-colors',
-                children: tr('common.refresh'),
-              }),
-              jsx('button', {
-                type: 'button',
-                onClick: onClose,
-                className: 'rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs hover:bg-(--chrome-action-hover) transition-colors',
-                children: isTh ? 'ปิด' : 'Close',
-              }),
-            ],
-          }),
-        ],
-      })
-
-      if (!token) {
-        return jsxs('div', {
-          className: 'flex flex-col gap-3',
-          children: [
-            jsx(DialogHeader, {
-              className: 'flex flex-row items-center justify-between gap-2 pr-6',
-              children: jsx(DialogTitle, { children: 'MaxPlus Credit' }),
-            }),
-            jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('popup.needToken') }),
-            footer,
-          ],
-        })
-      }
-      if (me.isLoading) {
-        return jsxs('div', {
-          className: 'flex flex-col gap-3',
-          children: [
-            jsx(DialogHeader, {
-              className: 'flex flex-row items-center justify-between gap-2 pr-6',
-              children: jsx(DialogTitle, { children: 'MaxPlus Credit' }),
-            }),
-            jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('popup.loading') }),
-            footer,
-          ],
-        })
-      }
-      if (me.error) {
-        return jsxs('div', {
-          className: 'flex flex-col gap-3',
-          children: [
-            jsx(DialogHeader, {
-              className: 'flex flex-row items-center justify-between gap-2 pr-6',
-              children: jsx(DialogTitle, { children: 'MaxPlus Credit' }),
-            }),
-            jsx('div', { className: 'text-sm text-rose-400', children: getErrorMessage(me.error, tr) }),
-            footer,
-          ],
-        })
-      }
-      const k = pickKey(me.data)
-      const bal = me.data && me.data.credit_usd
-      const freeText = freeLine(k.free, tr, isTh)
-
-      const periodsList = [
-        { id: '1d', label: tr('common.period1d') },
-        { id: '7d', label: tr('common.period7d') },
-        { id: '30d', label: tr('common.period30d') },
-      ]
-
-      return jsxs('div', {
-        className: 'flex flex-col gap-3',
-        children: [
-          jsxs(DialogHeader, {
-            className: 'flex flex-row items-center justify-between gap-2 pr-6',
-            children: [
-              jsx(DialogTitle, { children: 'MaxPlus Credit' }),
-              jsxs('div', {
-                className: 'flex items-center gap-1.5',
-                children: [
-                  jsx('span', {
-                    className: 'rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
-                    children: k.pool,
-                  }),
-                  jsx('span', {
-                    className: `rounded px-1.5 py-0.5 text-[0.6875rem] font-medium ${
-                      k.active !== false
-                        ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                        : 'border border-rose-500/30 bg-rose-500/10 text-rose-400'
-                    }`,
-                    children: k.active !== false ? (isTh ? 'เปิดใช้งาน' : 'Active') : (isTh ? 'ปิดอยู่' : 'Inactive'),
-                  }),
-                ],
-              }),
-            ],
-          }),
-          jsxs('div', {
-            className: 'flex flex-col gap-1 rounded-lg border border-(--ui-stroke-secondary) p-3 bg-(--ui-bg-elevated,transparent)',
-            children: [
-              jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('hero.title') }),
-              jsx('div', {
-                style: { fontSize: 28, fontWeight: 700, lineHeight: 1.15 },
-                className: 'font-mono tabular-nums text-foreground',
-                children: fmtUsd(bal),
-              }),
-              freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary) pt-0.5', children: freeText }) : null,
-              jsx(CapInfo, { k, tr }),
-            ],
-          }),
-          jsxs('div', {
-            className: 'flex flex-col gap-2 rounded-lg border border-(--ui-stroke-secondary) p-3',
-            children: [
-              jsxs('div', {
-                className: 'flex items-center justify-between',
-                children: [
-                  jsx('span', { className: 'text-xs font-medium text-(--ui-text-secondary)', children: tr('usage.title') }),
-                  jsxs('div', {
-                    className: 'flex gap-1',
-                    children: periodsList.map((p) => jsx('button', {
-                      type: 'button',
-                      onClick: () => {
-                        haptic('tap')
-                        setPeriod(p.id)
-                      },
-                      className: 'rounded px-2 py-0.5 text-xs transition-colors ' + (period === p.id
-                        ? 'bg-(--ui-accent) text-white font-medium'
-                        : 'border border-(--ui-stroke-secondary) text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'),
-                      children: p.label,
-                    }, p.id)),
-                  }),
-                ],
-              }),
-              jsx(UsageBlock, { period, label: '' }),
-            ],
-          }),
-          footer,
-        ],
-      })
-    }
-
-    function Chip() {
-      const [dialogOpen, setDialogOpen] = useState(false)
-      const token = useValue($token)
-      const mgmt = useValue($mgmt)
-      const me = useMeQuery()
-      const keys = useKeysQuery()
-      const tr = useT()
-
-      let label = tr('chip.noKey')
-      if (token) {
-        if (me.data) {
-          const c = me.data.credit_usd
-          label = typeof c === 'number' ? `MaxPlus $${c.toFixed(2)}` : 'MaxPlus'
-        } else if (me.isLoading) label = tr('chip.loading')
-        else if (me.error) label = tr('chip.error')
-      } else if (mgmt) {
-        if (keys.data) label = tr('chip.keysCount', pickKeyList(keys.data).length)
-        else if (keys.isLoading) label = tr('chip.loading')
-        else if (keys.error) label = tr('chip.error')
-      }
-      return jsxs(Fragment, {
-        children: [
-          jsx('button', {
-            type: 'button',
-            title: tr('chip.tooltip'),
-            className: 'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
-            onClick: () => {
-              haptic('tap')
-              setDialogOpen(true)
-            },
-            children: label,
-          }),
-          jsx(Dialog, {
-            open: dialogOpen,
-            onOpenChange: setDialogOpen,
-            children: jsx(DialogContent, {
-              fitContent: true,
-              className: 'min-w-[28rem] sm:max-w-lg rounded-xl border-(--ui-accent)',
-              bodyClassName: 'gap-3 overflow-auto max-h-[80vh] p-4',
-              'data-context-menu-skip': '',
-              children: jsx(MaxPlusModalDialog, { onClose: () => setDialogOpen(false) }),
-            }),
-          }),
-        ],
-      })
-    }
-
     function TokenField({ slot, label, placeholder, pattern, hint }) {
       const $a = slot === 'ccsk' ? $token : $mgmt
       const cur = useValue($a)
@@ -970,6 +766,10 @@ export default {
         const ok = await ctx.os.writeClipboard(baseFor(curPool))
         host.notify({ kind: 'info', message: ok ? tr('card.copiedBaseUrl', baseFor(curPool)) : tr('card.copyFailedBaseUrl', baseFor(curPool)) })
       }
+      const capKey = {
+        limit: typeof k.limit_usd === 'number' ? k.limit_usd : (typeof k.limit === 'number' ? k.limit : null),
+        used: typeof k.limit_used_usd === 'number' ? k.limit_used_usd : (typeof k.used_usd === 'number' ? k.used_usd : k.used),
+      }
       return jsxs('div', {
         className: 'flex flex-col gap-1 rounded-sm border border-(--ui-stroke-secondary) p-1.5',
         children: [
@@ -983,6 +783,7 @@ export default {
               }),
             ],
           }),
+          jsx(CapInfo, { k: capKey, tr }),
           jsx(Row, { label: 'pool', value: curPool }),
           jsxs('div', {
             className: 'flex items-center justify-between gap-2 py-0.5 text-sm',
@@ -1082,60 +883,48 @@ export default {
       })
     }
 
-    function HeroSection() {
+    function MaxPlusModalDialog({ onClose }) {
+      const [tab, setTab] = useState('overview')
       const token = useValue($token)
       const me = useMeQuery()
-      const u7 = useUsageQuery('7d')
+      const [period, setPeriod] = useState('1d')
       const tr = useT()
       const currentLang = useValue($lang)
       const isTh = currentLang === 'th'
 
-      if (!token) {
-        return jsx(Section, {
-          title: tr('hero.title'),
-          children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('hero.needToken') }),
-        })
-      }
-      if (me.isLoading) {
-        return jsx(Section, { title: tr('hero.title'), children: jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('hero.loading') }) })
-      }
-      if (me.error) {
-        return jsx(Section, { title: tr('hero.title'), children: jsx('div', { className: 'text-sm', children: getErrorMessage(me.error, tr) }) })
-      }
-      const k = pickKey(me.data)
-      const bal = me.data && me.data.credit_usd
-      const c7 = !u7.isLoading && !u7.error ? costOf(totalsOf(u7.data)) : null
-      const perDay = c7 != null ? c7 / 7 : null
-      const days = typeof bal === 'number' && perDay > 0 ? bal / perDay : null
-      const pace = days == null
-        ? (c7 != null ? tr('hero.paceAverage', fmtUsd(perDay)) : tr('hero.paceWaiting'))
-        : days < 3
-          ? tr('hero.paceWarn', fmtUsd(perDay), days < 1 ? tr('hero.lessThanDay') : tr('hero.daysCount', Math.floor(days)))
-          : tr('hero.paceNormal', fmtUsd(perDay), tr('hero.daysCount', Math.floor(days)))
-      const freeText = freeLine(k.free, tr, isTh)
-      return jsxs('div', {
-        className: 'flex flex-col gap-0.5 rounded-md border border-(--ui-stroke-secondary) p-3',
-        children: [
-          jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('hero.header', k.pool, k.active !== false) }),
-          jsx('div', {
-            style: { fontSize: 30, fontWeight: 650, lineHeight: 1.15 },
-            className: 'font-mono tabular-nums',
-            children: fmtUsd(bal),
-          }),
-          jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: pace }),
-          freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: freeText }) : null,
-          jsx(CapInfo, { k, fallback: true, tr }),
-        ],
-      })
-    }
-
-    function StatusPage() {
-      const [usagePeriod, setUsagePeriod] = useState('1d')
-      const tr = useT()
       const refresh = () => {
+        haptic('tap')
         refreshAll()
         host.notify({ kind: 'info', message: tr('common.refreshed') })
       }
+
+      const tabs = [
+        { id: 'overview', label: tr('tabs.overview') || (isTh ? 'ภาพรวม' : 'Overview') },
+        { id: 'keys', label: tr('tabs.keys') || (isTh ? 'คีย์ทั้งหมด' : 'Keys') },
+        { id: 'settings', label: tr('tabs.settings') || (isTh ? 'ตั้งค่า' : 'Settings') },
+      ]
+
+      const footer = jsxs('div', {
+        className: 'flex items-center justify-end gap-2 pt-2 border-t border-(--ui-stroke-secondary)',
+        children: [
+          jsx('button', {
+            type: 'button',
+            onClick: refresh,
+            className: 'rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs hover:bg-(--chrome-action-hover) transition-colors',
+            children: tr('common.refresh'),
+          }),
+          jsx('button', {
+            type: 'button',
+            onClick: onClose,
+            className: 'rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs hover:bg-(--chrome-action-hover) transition-colors',
+            children: isTh ? 'ปิด' : 'Close',
+          }),
+        ],
+      })
+
+      const k = me.data ? pickKey(me.data) : null
+      const bal = me.data && me.data.credit_usd
+      const freeText = k ? freeLine(k.free, tr, isTh) : null
 
       const periodsList = [
         { id: '1d', label: tr('common.period1d') },
@@ -1143,59 +932,204 @@ export default {
         { id: '30d', label: tr('common.period30d') },
       ]
 
-      return jsxs('div', {
-        className: 'flex h-full flex-col gap-2 overflow-y-auto p-3 text-sm',
-        children: [
-          jsxs('div', {
-            className: 'flex items-center justify-between',
+      let tabContent = null
+
+      if (tab === 'overview') {
+        if (!token) {
+          tabContent = jsxs('div', {
+            className: 'flex flex-col items-center justify-center gap-3 py-8 text-center',
             children: [
-              jsx('div', { className: 'font-medium', children: 'MaxPlus' }),
+              jsx('div', { className: 'text-sm text-(--ui-text-tertiary)', children: tr('popup.needToken') }),
+              jsx('button', {
+                type: 'button',
+                onClick: () => {
+                  haptic('tap')
+                  setTab('settings')
+                },
+                className: 'rounded-md border border-(--ui-accent) bg-(--ui-accent)/10 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-(--ui-accent)/20 transition-colors',
+                children: isTh ? 'ไปที่แท็บตั้งค่า →' : 'Go to Settings →',
+              }),
+            ],
+          })
+        } else if (me.isLoading) {
+          tabContent = jsx('div', { className: 'py-8 text-center text-sm text-(--ui-text-tertiary)', children: tr('popup.loading') })
+        } else if (me.error) {
+          tabContent = jsx('div', { className: 'py-6 text-center text-sm text-rose-400', children: getErrorMessage(me.error, tr) })
+        } else {
+          tabContent = jsxs('div', {
+            className: 'flex flex-col gap-3',
+            children: [
               jsxs('div', {
-                className: 'flex items-center gap-2',
+                className: 'flex flex-col gap-1 rounded-lg border border-(--ui-stroke-secondary) p-3 bg-(--ui-bg-elevated,transparent)',
                 children: [
-                  jsx(LangSwitch, {}),
-                  jsx('button', {
-                    type: 'button',
-                    onClick: refresh,
-                    className: 'rounded-sm border border-(--ui-stroke-secondary) px-2 py-0.5 text-xs hover:bg-(--chrome-action-hover)',
-                    children: tr('common.refresh'),
+                  jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('hero.title') }),
+                  jsx('div', {
+                    style: { fontSize: 28, fontWeight: 700, lineHeight: 1.15 },
+                    className: 'font-mono tabular-nums text-foreground',
+                    children: fmtUsd(bal),
                   }),
+                  freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary) pt-0.5', children: freeText }) : null,
+                  jsx(CapInfo, { k, tr }),
+                ],
+              }),
+              jsxs('div', {
+                className: 'flex flex-col gap-2 rounded-lg border border-(--ui-stroke-secondary) p-3',
+                children: [
+                  jsxs('div', {
+                    className: 'flex items-center justify-between',
+                    children: [
+                      jsx('span', { className: 'text-xs font-medium text-(--ui-text-secondary)', children: tr('usage.title') }),
+                      jsxs('div', {
+                        className: 'flex gap-1',
+                        children: periodsList.map((p) => jsx('button', {
+                          type: 'button',
+                          onClick: () => {
+                            haptic('tap')
+                            setPeriod(p.id)
+                          },
+                          className: 'rounded px-2 py-0.5 text-xs transition-colors ' + (period === p.id
+                            ? 'bg-(--ui-accent) text-white font-medium'
+                            : 'border border-(--ui-stroke-secondary) text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'),
+                          children: p.label,
+                        }, p.id)),
+                      }),
+                    ],
+                  }),
+                  jsx(UsageBlock, { period, label: '' }),
                 ],
               }),
             ],
-          }),
-          jsx(HeroSection, {}),
-          jsx(Section, {
-            title: tr('usage.title'),
-            right: jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('usage.subtitle') }),
-            children: jsxs('div', {
-              className: 'flex flex-col gap-2',
-              children: [
-                jsx('div', {
-                  className: 'flex gap-1',
-                  children: periodsList.map((p) => jsx('button', {
-                    type: 'button',
-                    onClick: () => {
-                      haptic('tap')
-                      setUsagePeriod(p.id)
-                    },
-                    className: 'flex-1 rounded-sm border px-2 py-0.5 text-xs ' + (usagePeriod === p.id
-                      ? 'border-(--ui-accent) text-foreground'
-                      : 'border-(--ui-stroke-secondary) text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)'),
-                    children: p.label,
-                  }, p.id)),
-                }),
-                jsx(UsageBlock, { period: usagePeriod, label: '' }),
-              ],
+          })
+        }
+      } else if (tab === 'keys') {
+        tabContent = jsx(KeysSection, {})
+      } else if (tab === 'settings') {
+        tabContent = jsxs('div', {
+          className: 'flex flex-col gap-3',
+          children: [
+            jsx(Section, {
+              title: tr('token.title'),
+              children: jsxs('div', {
+                className: 'flex flex-col gap-3 pt-1',
+                children: [
+                  jsx(TokenField, {
+                    slot: 'ccsk',
+                    label: tr('token.inferenceLabel'),
+                    placeholder: 'ccsk-…',
+                    pattern: KEY_RE,
+                    hint: tr('token.inferenceHint'),
+                  }),
+                  jsx(TokenField, {
+                    slot: 'ccmk',
+                    label: tr('token.mgmtLabel'),
+                    placeholder: 'ccmk-…',
+                    pattern: MGMT_RE,
+                    hint: tr('token.mgmtHint'),
+                  }),
+                ],
+              }),
             }),
+            jsx(Section, {
+              title: tr('common.lang'),
+              right: jsx(LangSwitch, {}),
+              children: jsx('div', {
+                className: 'text-xs text-(--ui-text-tertiary)',
+                children: isTh ? 'สลับภาษาอินเทอร์เฟซ (อัตโนมัติ / EN / TH)' : 'Switch interface language (Auto / EN / TH)',
+              }),
+            }),
+          ],
+        })
+      }
+
+      return jsxs('div', {
+        className: 'flex flex-col gap-3',
+        children: [
+          jsxs(DialogHeader, {
+            className: 'flex flex-row items-center justify-between gap-2 pr-6',
+            children: [
+              jsx(DialogTitle, { children: 'MaxPlus Credit' }),
+              k ? jsxs('div', {
+                className: 'flex items-center gap-1.5',
+                children: [
+                  jsx('span', {
+                    className: 'rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
+                    children: k.pool,
+                  }),
+                  jsx('span', {
+                    className: `rounded px-1.5 py-0.5 text-[0.6875rem] font-medium ${
+                      k.active !== false
+                        ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                        : 'border border-rose-500/30 bg-rose-500/10 text-rose-400'
+                    }`,
+                    children: k.active !== false ? (isTh ? 'เปิดใช้งาน' : 'Active') : (isTh ? 'ปิดอยู่' : 'Inactive'),
+                  }),
+                ],
+              }) : null,
+            ],
           }),
-          jsx(KeysSection, {}),
-          jsx(Section, {
-            title: tr('token.title'),
-            children: jsxs('div', {
-              className: 'flex flex-col gap-2',
-              children: [
-              ],
+          jsxs('div', {
+            className: 'flex items-center gap-1 border-b border-(--ui-stroke-secondary) pb-2',
+            children: tabs.map((tItem) => jsx('button', {
+              type: 'button',
+              onClick: () => {
+                haptic('tap')
+                setTab(tItem.id)
+              },
+              className: `rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                tab === tItem.id
+                  ? 'bg-(--ui-accent) text-white'
+                  : 'text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'
+              }`,
+              children: tItem.label,
+            }, tItem.id)),
+          }),
+          tabContent,
+          footer,
+        ],
+      })
+    }
+
+    function Chip() {
+      const dialogOpen = useValue($dialogOpen)
+      const token = useValue($token)
+      const mgmt = useValue($mgmt)
+      const me = useMeQuery()
+      const keys = useKeysQuery()
+      const tr = useT()
+
+      let label = tr('chip.noKey')
+      if (token) {
+        if (me.data) {
+          const c = me.data.credit_usd
+          label = typeof c === 'number' ? `MaxPlus $${c.toFixed(2)}` : 'MaxPlus'
+        } else if (me.isLoading) label = tr('chip.loading')
+        else if (me.error) label = tr('chip.error')
+      } else if (mgmt) {
+        if (keys.data) label = tr('chip.keysCount', pickKeyList(keys.data).length)
+        else if (keys.isLoading) label = tr('chip.loading')
+        else if (keys.error) label = tr('chip.error')
+      }
+      return jsxs(Fragment, {
+        children: [
+          jsx('button', {
+            type: 'button',
+            title: tr('chip.tooltip'),
+            className: 'inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem] text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
+            onClick: () => {
+              haptic('tap')
+              $dialogOpen.set(true)
+            },
+            children: label,
+          }),
+          jsx(Dialog, {
+            open: dialogOpen,
+            onOpenChange: (v) => $dialogOpen.set(v),
+            children: jsx(DialogContent, {
+              fitContent: true,
+              className: 'min-w-[32rem] sm:max-w-2xl rounded-xl border-(--ui-accent)',
+              bodyClassName: 'gap-3 overflow-y-auto max-h-[85vh] p-4',
+              'data-context-menu-skip': '',
+              children: jsx(MaxPlusModalDialog, { onClose: () => $dialogOpen.set(false) }),
             }),
           }),
         ],
@@ -1209,19 +1143,6 @@ export default {
       render: () => jsx(Chip, {}),
     })
 
-    ctx.register({
-      id: 'page',
-      area: ROUTES_AREA,
-      data: { path: '/maxplus' },
-      render: () => jsx(StatusPage, {}),
-    })
-
-    ctx.register({
-      id: 'nav',
-      area: SIDEBAR_NAV_AREA,
-      data: { path: '/maxplus', label: 'MaxPlus', codicon: 'credit-card' },
-    })
-
     ctx.registerMany([
       {
         id: 'open',
@@ -1229,8 +1150,8 @@ export default {
         data: {
           id: 'maxplus.open',
           label: MESSAGES_EN.palette.openLabel,
-          keywords: ['maxplus', 'credit', 'เครดิต', 'คีย์', 'status', 'เปิด'],
-          run: () => host.navigate('/maxplus'),
+          keywords: ['maxplus', 'credit', 'เครดิต', 'คีย์', 'status', 'เปิด', 'modal', 'dialog'],
+          run: () => $dialogOpen.set(true),
         },
       },
       {

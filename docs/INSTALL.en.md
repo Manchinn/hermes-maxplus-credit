@@ -23,7 +23,7 @@ Review the dialog → **Install** → back on the Plugins page, flip
 
 ## 3. Add tokens
 
-Open **MaxPlus** from the sidebar:
+Click the status-bar chip or open from Command Palette (`MaxPlus: ...`):
 
 1. **inference (ccsk)** slot — paste `ccsk-…` from the
    [MaxPlus Dashboard](https://maxplus-ai.cc/invite/ZSPXWCJB) → Save.

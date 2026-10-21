@@ -402,6 +402,23 @@ console.log('\n--- Testing errKey() & ERR_TH ---');
 
 // ─── Summary ─────────────────────────────────────────────────
 
+// ─── Modal Consolidation & Architecture Verification ─────────
+console.log('\n--- Testing Unified Modal Dialog Architecture Invariants ---');
+{
+  assertTest('architecture', 'ROUTES_AREA removed from plugin.js', source.includes('ROUTES_AREA'), false);
+  assertTest('architecture', 'SIDEBAR_NAV_AREA removed from plugin.js', source.includes('SIDEBAR_NAV_AREA'), false);
+  assertTest('architecture', 'StatusPage removed from plugin.js', source.includes('function StatusPage'), false);
+  assertTest('architecture', 'HeroSection removed from plugin.js', source.includes('function HeroSection'), false);
+  assertTest('architecture', 'Shared $dialogOpen atom defined', source.includes('const $dialogOpen = atom(false)'), true);
+  assertTest('architecture', 'Chip listens to $dialogOpen', source.includes('const dialogOpen = useValue($dialogOpen)'), true);
+  assertTest('architecture', 'Palette maxplus.open sets $dialogOpen', source.includes('$dialogOpen.set(true)'), true);
+  assertTest('architecture', 'openFull removed from MaxPlusModalDialog', source.includes('openFull'), false);
+  assertTest('architecture', 'MaxPlusModalDialog has overview tab', source.includes("id: 'overview'"), true);
+  assertTest('architecture', 'MaxPlusModalDialog has keys tab', source.includes("id: 'keys'"), true);
+  assertTest('architecture', 'MaxPlusModalDialog has settings tab', source.includes("id: 'settings'"), true);
+  assertTest('architecture', 'DialogContent sizing for keys section', source.includes('min-w-[32rem]') && source.includes('max-h-[85vh]'), true);
+}
+
 // ─── baseFor ─────────────────────────────────────────────────
 console.log('\n--- Testing baseFor() ---');
 {

@@ -24,7 +24,7 @@ Install → flip the toggle on.
 
 ## 3. ใส่ token · Add tokens
 
-เปิดหน้า **MaxPlus** จาก sidebar:
+กด chip ที่ status bar หรือเปิดจาก Command Palette (`MaxPlus: ...`):
 
 1. ช่อง **inference (ccsk)** — เอา `ccsk-…` จาก
    [MaxPlus Dashboard](https://maxplus-ai.cc/invite/ZSPXWCJB) มาใส่ กดบันทึก ·

@@ -32,9 +32,8 @@ hermes://plugin/install?repo=Manchinn/hermes-maxplus-credit&enable=1
 
 ## ใช้งาน
 
-1. เปิดหน้า **MaxPlus** จาก sidebar
-2. สลับภาษาได้ทันทีผ่านปุ่ม `[ Auto | EN | TH ]` ด้านบนขวา
-3. ใส่ **inference token** (`ccsk-…`) — โชว์เครดิต + usage บัญชี
-4. ใส่ **management token** (`ccmk-…`) — โชว์ key ทั้งบัญชีแยกตาม pool (scope `keys:read` + `usage:read` ก็เพียงพอ)
-
-chip ที่ status bar ขวาโชว์ยอดคงเหลือ (`MaxPlus $xx.xx`, poll ทุก 60 วิ) — กดแล้วเด้ง **popup สรุป** ทันที ไม่ต้องเข้าหน้าเต็ม
+1. เปิดหน้าต่าง **MaxPlus Credit** จาก status bar chip หรือ Command Palette (`maxplus.open`)
+2. รวมศูนย์ UI ไว้ใน Modal เดียว 3 แท็บ:
+   - **ภาพรวม (Overview):** ยอดเครดิตคงเหลือ ($), เครดิตฟรี, cap progress และ usage 1d/7d/30d
+   - **คีย์ทั้งหมด (Keys):** ตาราง key ทุก pool พร้อมค้นหา, กรอง pool, คัดลอก base URL และ cap progress
+   - **ตั้งค่า (Settings):** จัดการ token (`ccsk-…`, `ccmk-…`) และสลับภาษา `[ Auto | EN | TH ]`

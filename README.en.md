@@ -31,9 +31,8 @@ Then enable **MaxPlus Credit** in Settings → Plugins (ships opt-in: `defaultEn
 
 ## Usage
 
-1. Open the **MaxPlus** page from the sidebar.
-2. Toggle your preferred language anytime with `[ Auto | EN | TH ]` at the top right.
-3. Add your **inference token** (`ccsk-…`) for balance + account usage.
-4. Add your **management token** (`ccmk-…`) for the all-keys table (`keys:read` + `usage:read` scopes are sufficient).
-
-The status-bar chip shows the balance (`MaxPlus $xx.xx`, polls every 60s) — click it for an instant **summary popup** without opening the full page.
+1. Open the **MaxPlus Credit** modal from the status-bar chip or via Command Palette (`maxplus.open`).
+2. Consolidated into a single 3-tab modal dialog:
+   - **Overview:** Credit balance ($), daily free credit, cap progress, and 1d/7d/30d account usage.
+   - **Keys:** All-keys table with search, pool filters, copy base URL, and cap progress.
+   - **Settings:** Token fields for inference (`ccsk-…`), management (`ccmk-…`), and language toggle `[ Auto | EN | TH ]`.
