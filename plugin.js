@@ -770,34 +770,50 @@ export default {
         limit: typeof k.limit_usd === 'number' ? k.limit_usd : (typeof k.limit === 'number' ? k.limit : null),
         used: typeof k.limit_used_usd === 'number' ? k.limit_used_usd : (typeof k.used_usd === 'number' ? k.used_usd : k.used),
       }
+      const isActive = k.active !== false
       return jsxs('div', {
-        className: 'flex flex-col gap-1 rounded-sm border border-(--ui-stroke-secondary) p-1.5',
+        className: 'flex flex-col gap-1.5 rounded-md border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated,transparent) p-2 text-xs transition-colors hover:border-(--ui-stroke-primary) hover:bg-(--chrome-action-hover)/40',
         children: [
           jsxs('div', {
             className: 'flex items-center justify-between gap-2',
             children: [
-              jsx('span', { className: 'truncate text-sm font-medium', children: k.name || k.id }),
-              jsx('span', {
-                className: 'shrink-0 font-mono text-xs text-(--ui-text-tertiary)',
-                children: tr('card.spendSummary', k.active !== false, fmtUsd(used)),
+              jsxs('div', {
+                className: 'flex min-w-0 items-center gap-2',
+                children: [
+                  jsx('span', {
+                    className: `inline-block h-2 w-2 shrink-0 rounded-full ${isActive ? 'bg-emerald-400' : 'bg-zinc-500'}`,
+                    title: isActive ? 'Active' : 'Inactive',
+                  }),
+                  jsx('span', {
+                    className: 'truncate font-medium text-foreground',
+                    title: k.name || k.id,
+                    children: k.name || k.id,
+                  }),
+                  jsx('span', {
+                    className: 'shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
+                    children: curPool,
+                  }),
+                ],
+              }),
+              jsxs('div', {
+                className: 'flex shrink-0 items-center gap-2.5',
+                children: [
+                  jsx('span', {
+                    className: 'font-mono tabular-nums font-semibold text-foreground',
+                    children: fmtUsd(used),
+                  }),
+                  jsx('button', {
+                    type: 'button',
+                    title: tr('card.copyBaseUrlTooltip'),
+                    onClick: copyBase,
+                    className: 'flex items-center gap-1 rounded border border-(--ui-stroke-secondary) px-2 py-0.5 font-mono text-[0.6875rem] text-(--ui-text-tertiary) hover:border-foreground/30 hover:bg-(--chrome-action-hover) hover:text-foreground transition-colors',
+                    children: 'Copy URL',
+                  }),
+                ],
               }),
             ],
           }),
-          jsx(CapInfo, { k: capKey, tr }),
-          jsx(Row, { label: 'pool', value: curPool }),
-          jsxs('div', {
-            className: 'flex items-center justify-between gap-2 py-0.5 text-sm',
-            children: [
-              jsx('span', { className: 'shrink-0 text-(--ui-text-tertiary)', children: 'base URL' }),
-              jsx('button', {
-                type: 'button',
-                title: tr('card.copyBaseUrlTooltip'),
-                onClick: copyBase,
-                className: 'truncate font-mono text-xs tabular-nums hover:bg-(--chrome-action-hover)',
-                children: baseFor(curPool),
-              }),
-            ],
-          }),
+          capKey.limit ? jsx(CapInfo, { k: capKey, tr }) : null,
         ],
       })
     }
@@ -957,23 +973,33 @@ export default {
           tabContent = jsx('div', { className: 'py-6 text-center text-sm text-rose-400', children: getErrorMessage(me.error, tr) })
         } else {
           tabContent = jsxs('div', {
-            className: 'flex flex-col gap-3',
+            className: 'grid grid-cols-1 md:grid-cols-2 gap-3',
             children: [
               jsxs('div', {
-                className: 'flex flex-col gap-1 rounded-lg border border-(--ui-stroke-secondary) p-3 bg-(--ui-bg-elevated,transparent)',
+                className: 'flex flex-col justify-between gap-3 rounded-lg border border-(--ui-stroke-secondary) p-3.5 bg-(--ui-bg-elevated,transparent)',
                 children: [
-                  jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('hero.title') }),
-                  jsx('div', {
-                    style: { fontSize: 28, fontWeight: 700, lineHeight: 1.15 },
-                    className: 'font-mono tabular-nums text-foreground',
-                    children: fmtUsd(bal),
+                  jsxs('div', {
+                    className: 'flex flex-col gap-1',
+                    children: [
+                      jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: tr('hero.title') }),
+                      jsx('div', {
+                        style: { fontSize: 30, fontWeight: 700, lineHeight: 1.15 },
+                        className: 'font-mono tabular-nums text-foreground',
+                        children: fmtUsd(bal),
+                      }),
+                    ],
                   }),
-                  freeText ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary) pt-0.5', children: freeText }) : null,
-                  jsx(CapInfo, { k, tr }),
+                  jsxs('div', {
+                    className: 'flex flex-col gap-1 pt-2 border-t border-(--ui-stroke-secondary)/50',
+                    children: [
+                      freeText ? jsx('div', { className: 'text-xs text-(--ui-text-secondary)', children: freeText }) : null,
+                      jsx(CapInfo, { k, tr }),
+                    ],
+                  }),
                 ],
               }),
               jsxs('div', {
-                className: 'flex flex-col gap-2 rounded-lg border border-(--ui-stroke-secondary) p-3',
+                className: 'flex flex-col justify-between gap-2 rounded-lg border border-(--ui-stroke-secondary) p-3.5 bg-(--ui-bg-elevated,transparent)',
                 children: [
                   jsxs('div', {
                     className: 'flex items-center justify-between',
@@ -987,7 +1013,7 @@ export default {
                             haptic('tap')
                             setPeriod(p.id)
                           },
-                          className: 'rounded px-2 py-0.5 text-xs transition-colors ' + (period === p.id
+                          className: 'rounded px-2 py-0.5 text-[0.6875rem] transition-colors ' + (period === p.id
                             ? 'bg-(--ui-accent) text-white font-medium'
                             : 'border border-(--ui-stroke-secondary) text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'),
                           children: p.label,
@@ -1067,18 +1093,18 @@ export default {
               }) : null,
             ],
           }),
-          jsxs('div', {
-            className: 'flex items-center gap-1 border-b border-(--ui-stroke-secondary) pb-2',
+          jsx('div', {
+            className: 'flex items-center rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated,transparent) p-0.5',
             children: tabs.map((tItem) => jsx('button', {
               type: 'button',
               onClick: () => {
                 haptic('tap')
                 setTab(tItem.id)
               },
-              className: `rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              className: `flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
                 tab === tItem.id
-                  ? 'bg-(--ui-accent) text-white'
-                  : 'text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground'
+                  ? 'bg-(--chrome-action-hover,rgba(255,255,255,0.08)) text-foreground shadow-sm font-semibold'
+                  : 'text-(--ui-text-tertiary) hover:text-foreground'
               }`,
               children: tItem.label,
             }, tItem.id)),
@@ -1125,8 +1151,7 @@ export default {
             open: dialogOpen,
             onOpenChange: (v) => $dialogOpen.set(v),
             children: jsx(DialogContent, {
-              fitContent: true,
-              className: 'min-w-[32rem] sm:max-w-2xl rounded-xl border-(--ui-accent)',
+              className: 'w-[44rem] min-w-[32rem] max-w-[95vw] rounded-xl border border-(--ui-stroke-secondary)',
               bodyClassName: 'gap-3 overflow-y-auto max-h-[85vh] p-4',
               'data-context-menu-skip': '',
               children: jsx(MaxPlusModalDialog, { onClose: () => $dialogOpen.set(false) }),
