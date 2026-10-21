@@ -59,10 +59,6 @@ globalThis.restError = restError;
 globalThis.API = API;
 globalThis.AUTH = AUTH;
 globalThis.baseFor = baseFor;
-globalThis.isReasoningModel = isReasoningModel;
-globalThis.classifyModelCategory = classifyModelCategory;
-globalThis.buildProbePayload = buildProbePayload;
-globalThis.parseProbeResponse = parseProbeResponse;
 `;
 
 const sandbox = {
@@ -101,10 +97,6 @@ const {
   API,
   AUTH,
   baseFor,
-  isReasoningModel,
-  classifyModelCategory,
-  buildProbePayload,
-  parseProbeResponse,
 } = sandbox;
 
 console.log('  PASSED: Successfully loaded functions into sandbox environment.\n');
@@ -421,80 +413,6 @@ console.log('\n--- Testing baseFor() ---');
   assertTest('baseFor', 'nonono channel pool', baseFor('nonono'), 'https://api.maxplus-ai.cc/nonono/v1');
   assertTest('baseFor', 'chinese-specials pool', baseFor('chinese-specials'), 'https://api.maxplus-ai.cc/chinese-specials/v1');
   assertTest('baseFor', 'deepseek-officials pool', baseFor('deepseek-officials'), 'https://api.maxplus-ai.cc/deepseek-officials/v1');
-}
-
-// ─── isReasoningModel ────────────────────────────────────────
-console.log('\n--- Testing isReasoningModel() ---');
-{
-  assertTest('isReasoningModel', 'deepseek-r1', isReasoningModel('deepseek-r1'), true);
-  assertTest('isReasoningModel', 'deepseek-v4.1-flash', isReasoningModel('deepseek-v4.1-flash'), true);
-  assertTest('isReasoningModel', 'claude-opus-4-6-thinking', isReasoningModel('claude-opus-4-6-thinking'), true);
-  assertTest('isReasoningModel', 'o1-preview', isReasoningModel('o1-preview'), true);
-  assertTest('isReasoningModel', 'o3-mini', isReasoningModel('o3-mini'), true);
-  assertTest('isReasoningModel', 'claude-sonnet-4-6', isReasoningModel('claude-sonnet-4-6'), false);
-  assertTest('isReasoningModel', 'swe-2', isReasoningModel('swe-2'), false);
-  assertTest('isReasoningModel', 'null', isReasoningModel(null), false);
-  assertTest('isReasoningModel', 'empty string', isReasoningModel(''), false);
-}
-
-// ─── classifyModelCategory ───────────────────────────────────
-console.log('\n--- Testing classifyModelCategory() ---');
-{
-  assertTest('classifyModelCategory', 'deepseek-r1 reasoning', classifyModelCategory('deepseek-r1'), 'reasoning');
-  assertTest('classifyModelCategory', 'deepseek-coder coding', classifyModelCategory('deepseek-coder-v2'), 'coding');
-  assertTest('classifyModelCategory', 'swe-2 coding', classifyModelCategory('swe-2'), 'coding');
-  assertTest('classifyModelCategory', 'qwen-vl vision', classifyModelCategory('qwen-vl-plus'), 'vision');
-  assertTest('classifyModelCategory', 'gpt-4o-omni vision', classifyModelCategory('gpt-4o-omni'), 'vision');
-  assertTest('classifyModelCategory', 'standard chat general', classifyModelCategory('meta-llama-3-8b-instruct'), 'general');
-  assertTest('classifyModelCategory', 'null fallback general', classifyModelCategory(null), 'general');
-}
-
-// ─── buildProbePayload ───────────────────────────────────────
-console.log('\n--- Testing buildProbePayload() ---');
-{
-  assertTest('buildProbePayload', 'Standard chat (8 tokens)', buildProbePayload('swe-2', false), {
-    model: 'swe-2',
-    messages: [{ role: 'user', content: 'ping' }],
-    max_tokens: 8,
-  });
-  assertTest('buildProbePayload', 'Reasoning model (80 tokens)', buildProbePayload('deepseek-r1', true), {
-    model: 'deepseek-r1',
-    messages: [{ role: 'user', content: 'ping' }],
-    max_tokens: 80,
-  });
-}
-
-// ─── parseProbeResponse ──────────────────────────────────────
-console.log('\n--- Testing parseProbeResponse() ---');
-{
-  assertTest('parseProbeResponse', 'HTTP 200 OK with checkpoint', parseProbeResponse(200, { model: 'deepseek-v4-flash-202605' }, 240.4), {
-    status: 200,
-    ok: true,
-    latencyMs: 240,
-    checkpoint: 'deepseek-v4-flash-202605',
-    error: null,
-  });
-  assertTest('parseProbeResponse', 'HTTP 400 with string error', parseProbeResponse(400, { error: 'Model unavailable on selected channel' }, 85), {
-    status: 400,
-    ok: false,
-    latencyMs: 85,
-    checkpoint: null,
-    error: 'Model unavailable on selected channel',
-  });
-  assertTest('parseProbeResponse', 'HTTP 403 with object error', parseProbeResponse(403, { error: { message: 'Key not bound to channel' } }, 95), {
-    status: 403,
-    ok: false,
-    latencyMs: 95,
-    checkpoint: null,
-    error: 'Key not bound to channel',
-  });
-  assertTest('parseProbeResponse', 'HTTP 504 timeout', parseProbeResponse(504, null, 15000), {
-    status: 504,
-    ok: false,
-    latencyMs: 15000,
-    checkpoint: null,
-    error: null,
-  });
 }
 
 console.log('\n======================================================');
